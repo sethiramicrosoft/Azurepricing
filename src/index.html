@@ -1,0 +1,1112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>SKU EA vs MCA-E Price Intelligence</title>
+<style>
+:root{
+  --bg:#0b1220;--panel:#111a2b;--panel2:#0f1728;--line:#22304a;
+  --text:#e5eefc;--muted:#8fa3c7;--accent:#5dd6ff;
+  --good:#2dd4bf;--bad:#fb7185;--warn:#fbbf24;
+  --shadow:0 18px 40px rgba(0,0,0,.28);
+  --bg-grad:radial-gradient(circle at top,#14203a 0%,#0b1220 45%,#060b14 100%);
+  --input-bg:#0b1324;--thead-bg:#0c1425;--btn-bg:#10192c;--btn-bg-hover:#152038;
+}
+html[data-theme='light']{
+  --bg:#f5f8ff;--panel:#fff;--panel2:#f4f7ff;--line:#d7e0ef;
+  --text:#10223e;--muted:#516480;--accent:#006bd6;
+  --good:#0f8b6f;--bad:#c6284f;--warn:#a16b00;
+  --shadow:0 10px 24px rgba(21,42,76,.12);
+  --bg-grad:linear-gradient(180deg,#eef3ff 0%,#f7faff 60%,#fff 100%);
+  --input-bg:#fff;--thead-bg:#edf3ff;--btn-bg:#fff;--btn-bg-hover:#eef4ff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg-grad);color:var(--text);font:14px/1.4 Inter,Segoe UI,Arial,sans-serif;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+.wrap{max-width:1680px;margin:0 auto;padding:24px}
+.hero{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin-bottom:20px;flex-wrap:wrap}
+h1{margin:0;font-size:28px}
+.sub{color:var(--muted);margin-top:6px}
+.hero-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hero-actions label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
+.card .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.12em}
+.card .value{font-size:26px;font-weight:700;margin-top:8px}
+.card .hint{color:var(--muted);margin-top:6px;font-size:12px}
+.section{margin-top:24px}
+.section h2{margin:0 0 12px 0;font-size:18px}
+.tools{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-bottom:14px}
+.tool{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.tool label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.1em}
+input,select,textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--input-bg);color:var(--text);outline:none;font:inherit}
+textarea{min-height:96px;resize:vertical;font-family:Consolas,Menlo,monospace;font-size:12px}
+.btn{border:1px solid var(--line);background:var(--btn-bg);color:var(--text);padding:9px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:500}
+.btn:hover{background:var(--btn-bg-hover);border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:#04121f;border-color:var(--accent);font-weight:600}
+.btn.primary:hover{filter:brightness(1.1)}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0}
+.scroll{overflow:auto;max-height:65vh;border-radius:14px}
+table{width:100%;border-collapse:separate;border-spacing:0;background:var(--panel)}
+thead th{position:sticky;top:0;background:var(--thead-bg);color:var(--muted);text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:12px 10px;z-index:2;border-bottom:1px solid var(--line);white-space:nowrap}
+tbody td{padding:10px;border-bottom:1px solid var(--line);vertical-align:top;font-size:13px}
+tbody tr:hover{background:rgba(93,214,255,.04)}
+.mono{font-family:Consolas,Menlo,monospace;font-size:12px}
+.badge{display:inline-flex;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
+.good{background:rgba(45,212,191,.15);color:var(--good)}
+.bad{background:rgba(251,113,133,.15);color:var(--bad)}
+.neutral{background:rgba(251,191,36,.15);color:var(--warn)}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.actions .btn{padding:5px 9px;font-size:11px}
+.small{font-size:11px;color:var(--muted)}
+.status{margin-top:10px;color:var(--muted);font-size:12px;min-height:18px}
+.uploadBox{border:1.5px dashed var(--line);padding:14px;border-radius:10px;background:var(--input-bg)}
+input[type="file"]::file-selector-button{border:1px solid var(--line);background:var(--btn-bg);color:var(--text);padding:7px 10px;border-radius:8px;cursor:pointer;margin-right:10px;font:inherit}
+.hidden{display:none !important}
+.tabs{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--line)}
+.tab{padding:10px 16px;cursor:pointer;color:var(--muted);font-weight:600;border-bottom:2px solid transparent}
+.tab.active{color:var(--accent);border-color:var(--accent)}
+.tab:hover{color:var(--text)}
+.pane{display:none}
+.pane.active{display:block}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;padding:20px}
+.modal.show{display:flex}
+.modal-box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;max-width:640px;width:100%;max-height:80vh;overflow:auto}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.modal-head h3{margin:0;color:var(--accent);font-size:18px}
+.close-x{background:none;border:none;color:var(--text);font-size:22px;cursor:pointer}
+.tier-row{padding:9px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.tier-row:last-child{border-bottom:none}
+.input-product-cell{min-width:240px;max-width:380px;white-space:normal;word-break:break-word}
+.col-meter-id{min-width:200px}
+.footer{color:var(--muted);font-size:12px;margin-top:24px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hero">
+  <div>
+    <h1>SKU EA vs MCA-E Price Intelligence</h1>
+    <div class="sub">Compare EA enrolment pricing with Azure MCA-E retail prices. Manual search, bulk lookup, and usage file analysis.</div>
+  </div>
+  <div class="hero-actions">
+    <div><label>Billing Country</label><select id="country"></select></div>
+    <div><label>Billing Currency</label><select id="billingCcy"></select></div>
+    <div><label>Theme</label><select id="theme"><option value="dark">Dark</option><option value="light">Light</option></select></div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-pane="manual">Manual Search</div>
+  <div class="tab" data-pane="bulk">Bulk Lookup</div>
+  <div class="tab" data-pane="usage">Usage File Analysis</div>
+</div>
+
+<!-- ============ MANUAL SEARCH ============ -->
+<div class="pane active" id="paneManual">
+  <div class="tools">
+    <div class="tool">
+      <label>Product / SKU / Meter Name</label>
+      <input id="searchInput" placeholder='e.g. "Premium SSD Managed Disks", "Virtual Machines D4 v3", "Log Analytics"'/>
+    </div>
+    <div class="tool">
+      <label>Region (Optional)</label>
+      <input id="searchRegion" placeholder="e.g. australiaeast"/>
+    </div>
+    <div class="tool">
+      <label>Action</label>
+      <div style="display:flex;gap:8px">
+        <button class="btn primary" id="btnSearch">Search</button>
+        <button class="btn" id="btnSearchCsv">Download CSV</button>
+      </div>
+      <div class="status" id="searchStatus">Ready.</div>
+    </div>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="scroll">
+      <table id="searchTbl"><thead></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ BULK LOOKUP ============ -->
+<div class="pane" id="paneBulk">
+  <div class="tools">
+    <div class="tool">
+      <label>Product Names (one per line)</label>
+      <textarea id="bulkInput" placeholder="Virtual Machines D4 v3&#10;Premium SSD Managed Disks P10&#10;Log Analytics"></textarea>
+    </div>
+    <div class="tool">
+      <label>Region (Optional)</label>
+      <input id="bulkRegion" placeholder="e.g. australiaeast"/>
+    </div>
+    <div class="tool">
+      <label>Action</label>
+      <div style="display:flex;gap:8px">
+        <button class="btn primary" id="btnBulk">Run Bulk Lookup</button>
+        <button class="btn" id="btnBulkCsv">Download CSV</button>
+      </div>
+      <div class="status" id="bulkStatus">Ready.</div>
+    </div>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="scroll">
+      <table id="bulkTbl"><thead></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ USAGE FILE ANALYSIS ============ -->
+<div class="pane" id="paneUsage">
+  <div class="tools">
+    <div class="tool">
+      <label>Usage File (CSV / XLSX / JSON)</label>
+      <div class="uploadBox"><input id="usageFile" type="file" accept=".csv,.json,.xlsx,.xls"/></div>
+      <div class="small" style="margin-top:6px">Azure usage exports with meter/product/cost/quantity columns. EA pricing read from file; MCA-E pricing fetched from Azure Retail API.</div>
+    </div>
+    <div class="tool">
+      <label>Region (Optional)</label>
+      <input id="usageRegion" placeholder="e.g. australiaeast"/>
+    </div>
+    <div class="tool">
+      <label>Action</label>
+      <div style="display:flex;gap:8px">
+        <button class="btn primary" id="btnUsage">Analyze File</button>
+        <button class="btn" id="btnUsageCsv">Download CSV</button>
+      </div>
+      <div class="status" id="usageStatus">Ready.</div>
+    </div>
+  </div>
+
+  <div class="grid3" id="usageSummary" style="display:none"></div>
+
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="scroll">
+      <table id="usageTbl"><thead></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div class="footer">Verify links open raw Azure Retail Prices API results for the selected meter ID in the chosen billing currency.</div>
+
+</div>
+
+<!-- Tier Modal -->
+<div class="modal" id="tierModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Graduated Pricing Tiers</h3>
+      <button class="close-x" onclick="document.getElementById('tierModal').classList.remove('show')">&times;</button>
+    </div>
+    <div id="tierBody"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+'use strict';
+
+// ============================================
+// CONFIG & STATE
+// ============================================
+const PROXY = window.location.protocol.startsWith('http')
+  ? `${window.location.origin}/api/prices`
+  : 'https://prices.azure.com/api/retail/prices';
+
+// Source: https://learn.microsoft.com/en-us/azure/cost-management-billing/microsoft-customer-agreement/microsoft-customer-agreement-faq
+// "Under the Microsoft Customer Agreement, in which currency is my payment processed?"
+const COUNTRY_CURRENCY = [
+  {country:'Afghanistan',currency:'USD'},
+  {country:'Albania',currency:'USD'},
+  {country:'Algeria',currency:'USD'},
+  {country:'Angola',currency:'USD'},
+  {country:'Argentina',currency:'USD'},
+  {country:'Armenia',currency:'USD'},
+  {country:'Australia',currency:'AUD'},
+  {country:'Austria',currency:'EUR'},
+  {country:'Azerbaijan',currency:'USD'},
+  {country:'Bahamas',currency:'USD'},
+  {country:'Bahrain',currency:'USD'},
+  {country:'Bangladesh',currency:'USD'},
+  {country:'Barbados',currency:'USD'},
+  {country:'Belarus',currency:'USD'},
+  {country:'Belgium',currency:'EUR'},
+  {country:'Belize',currency:'USD'},
+  {country:'Bermuda',currency:'USD'},
+  {country:'Bolivia',currency:'USD'},
+  {country:'Bosnia and Herzegovina',currency:'USD'},
+  {country:'Botswana',currency:'USD'},
+  {country:'Brazil',currency:'BRL'},
+  {country:'Brunei Darussalam',currency:'USD'},
+  {country:'Bulgaria',currency:'EUR'},
+  {country:'Cabo Verde',currency:'USD'},
+  {country:'Cameroon',currency:'USD'},
+  {country:'Canada',currency:'CAD'},
+  {country:'Cayman Islands',currency:'USD'},
+  {country:'Chile',currency:'USD'},
+  {country:'China',currency:'CNY'},
+  {country:'Colombia',currency:'USD'},
+  {country:'Republic of the Congo',currency:'USD'},
+  {country:'Costa Rica',currency:'USD'},
+  {country:"Côte d'Ivoire",currency:'USD'},
+  {country:'Croatia',currency:'EUR'},
+  {country:'Curaçao',currency:'USD'},
+  {country:'Cyprus',currency:'EUR'},
+  {country:'Czech Republic',currency:'EUR'},
+  {country:'Denmark',currency:'DKK'},
+  {country:'Dominican Republic',currency:'USD'},
+  {country:'Ecuador',currency:'USD'},
+  {country:'Egypt',currency:'USD'},
+  {country:'El Salvador',currency:'USD'},
+  {country:'Estonia',currency:'EUR'},
+  {country:'Ethiopia',currency:'USD'},
+  {country:'Faroe Islands',currency:'DKK'},
+  {country:'Fiji',currency:'AUD'},
+  {country:'Finland',currency:'EUR'},
+  {country:'France',currency:'EUR'},
+  {country:'Georgia',currency:'USD'},
+  {country:'Germany',currency:'EUR'},
+  {country:'Ghana',currency:'USD'},
+  {country:'Greece',currency:'EUR'},
+  {country:'Guatemala',currency:'USD'},
+  {country:'Honduras',currency:'USD'},
+  {country:'Hong Kong SAR',currency:'USD'},
+  {country:'Hungary',currency:'EUR'},
+  {country:'Iceland',currency:'EUR'},
+  {country:'India',currency:'INR'},
+  {country:'Indonesia',currency:'USD'},
+  {country:'Iraq',currency:'USD'},
+  {country:'Ireland',currency:'EUR'},
+  {country:'Israel',currency:'USD'},
+  {country:'Italy',currency:'EUR'},
+  {country:'Jamaica',currency:'USD'},
+  {country:'Japan',currency:'JPY'},
+  {country:'Jordan',currency:'USD'},
+  {country:'Kazakhstan',currency:'USD'},
+  {country:'Kenya',currency:'USD'},
+  {country:'Korea',currency:'KRW'},
+  {country:'Kuwait',currency:'USD'},
+  {country:'Kyrgyzstan',currency:'USD'},
+  {country:'Latvia',currency:'EUR'},
+  {country:'Lebanon',currency:'USD'},
+  {country:'Libya',currency:'USD'},
+  {country:'Liechtenstein',currency:'CHF'},
+  {country:'Lithuania',currency:'EUR'},
+  {country:'Luxembourg',currency:'EUR'},
+  {country:'Macao SAR',currency:'USD'},
+  {country:'Malaysia',currency:'USD'},
+  {country:'Malta',currency:'EUR'},
+  {country:'Mauritius',currency:'USD'},
+  {country:'Mexico',currency:'USD'},
+  {country:'Moldova',currency:'USD'},
+  {country:'Monaco',currency:'EUR'},
+  {country:'Mongolia',currency:'USD'},
+  {country:'Montenegro',currency:'USD'},
+  {country:'Morocco',currency:'USD'},
+  {country:'Namibia',currency:'USD'},
+  {country:'Nepal',currency:'USD'},
+  {country:'Netherlands',currency:'EUR'},
+  {country:'New Zealand',currency:'NZD'},
+  {country:'Nicaragua',currency:'USD'},
+  {country:'Nigeria',currency:'USD'},
+  {country:'North Macedonia',currency:'USD'},
+  {country:'Norway',currency:'NOK'},
+  {country:'Oman',currency:'USD'},
+  {country:'Pakistan',currency:'USD'},
+  {country:'Palestinian Authority',currency:'USD'},
+  {country:'Panama',currency:'USD'},
+  {country:'Paraguay',currency:'USD'},
+  {country:'Peru',currency:'USD'},
+  {country:'Philippines',currency:'USD'},
+  {country:'Poland',currency:'EUR'},
+  {country:'Portugal',currency:'EUR'},
+  {country:'Puerto Rico',currency:'USD'},
+  {country:'Qatar',currency:'USD'},
+  {country:'Romania',currency:'EUR'},
+  {country:'Russia',currency:'RUB'},
+  {country:'Rwanda',currency:'USD'},
+  {country:'Saint Kitts and Nevis',currency:'USD'},
+  {country:'Saudi Arabia',currency:'USD'},
+  {country:'Senegal',currency:'USD'},
+  {country:'Serbia',currency:'USD'},
+  {country:'Singapore',currency:'USD'},
+  {country:'Slovakia',currency:'EUR'},
+  {country:'Slovenia',currency:'EUR'},
+  {country:'South Africa',currency:'USD'},
+  {country:'Spain',currency:'EUR'},
+  {country:'Sri Lanka',currency:'USD'},
+  {country:'Sweden',currency:'SEK'},
+  {country:'Switzerland',currency:'CHF'},
+  {country:'Taiwan',currency:'TWD'},
+  {country:'Tajikistan',currency:'USD'},
+  {country:'Tanzania',currency:'USD'},
+  {country:'Thailand',currency:'USD'},
+  {country:'Trinidad and Tobago',currency:'USD'},
+  {country:'Tunisia',currency:'USD'},
+  {country:'Türkiye',currency:'USD'},
+  {country:'Turkmenistan',currency:'USD'},
+  {country:'Uganda',currency:'USD'},
+  {country:'Ukraine',currency:'USD'},
+  {country:'United Arab Emirates',currency:'USD'},
+  {country:'United Kingdom',currency:'GBP'},
+  {country:'United States',currency:'USD'},
+  {country:'Uruguay',currency:'USD'},
+  {country:'Uzbekistan',currency:'USD'},
+  {country:'Venezuela',currency:'USD'},
+  {country:'Vietnam',currency:'USD'},
+  {country:'Virgin Islands of the United States',currency:'USD'},
+  {country:'Yemen',currency:'USD'},
+  {country:'Zambia',currency:'USD'},
+  {country:'Zimbabwe',currency:'USD'},
+];
+const ALL_CURRENCIES = ['USD','AUD','BRL','GBP','CAD','CNY','DKK','EUR','INR','JPY','KRW','NZD','NOK','RUB','SEK','CHF','TWD'];
+
+const COLUMNS = [
+  'Input Product','Input Part #','Product Name','SKU Name','Meter Name',
+  'Meter ID','Location','Type','Pricing Ccy','Billing Ccy',
+  'Total Qty','EA Total Cost','EA Unit Price','EA UOM','MCA-E Total Cost',
+  'MCA-E Unit Price','MCA-E UOM','Graduated Pricing','Comparable Delta %','Actions'
+];
+
+let lastSearchResults = [];
+let lastBulkResults = [];
+let lastUsageResults = [];
+
+// ============================================
+// UTILITIES
+// ============================================
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const isNum = (n) => typeof n === 'number' && isFinite(n);
+const toNum = (v) => {
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  if (v == null || v === '') return null;
+  const n = Number(String(v).replace(/[, $]/g, ''));
+  return isFinite(n) ? n : null;
+};
+const money = (n) => isNum(n) ? n.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4}) : '-';
+const pct = (n) => isNum(n) ? `${n.toFixed(2)}%` : '-';
+
+function getBillingCurrency(){ return $('billingCcy').value || 'AUD'; }
+
+// ============================================
+// THEME + COUNTRY/CURRENCY INIT
+// ============================================
+function initSelectors(){
+  const sel = $('country');
+  COUNTRY_CURRENCY.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.country; o.textContent = `${c.country} (${c.currency})`;
+    o.dataset.currency = c.currency;
+    sel.appendChild(o);
+  });
+  sel.value = 'Australia';
+
+  const cs = $('billingCcy');
+  ALL_CURRENCIES.forEach(c => {
+    const o = document.createElement('option'); o.value=c; o.textContent=c; cs.appendChild(o);
+  });
+  cs.value = 'AUD';
+
+  sel.addEventListener('change', () => {
+    const opt = sel.options[sel.selectedIndex];
+    if (opt.dataset.currency) cs.value = opt.dataset.currency;
+  });
+
+  $('theme').addEventListener('change', e => {
+    document.documentElement.setAttribute('data-theme', e.target.value);
+    localStorage.setItem('theme', e.target.value);
+  });
+  const savedTheme = localStorage.getItem('theme') || 'dark';
+  $('theme').value = savedTheme;
+  document.documentElement.setAttribute('data-theme', savedTheme);
+}
+
+// ============================================
+// TAB SWITCHING
+// ============================================
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    $('pane' + t.dataset.pane.charAt(0).toUpperCase() + t.dataset.pane.slice(1)).classList.add('active');
+  });
+});
+
+// ============================================
+// API CALLS (Azure Retail Prices via proxy)
+// ============================================
+async function apiFetch(filter){
+  const ccy = getBillingCurrency();
+  const url = `${PROXY}?currencyCode=${encodeURIComponent(ccy)}&$filter=${encodeURIComponent(filter)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json();
+}
+
+async function searchProducts(name, region){
+  const clean = String(name||'').trim();
+  if (!clean) return [];
+  const esc1 = clean.replace(/'/g,"''");
+  const tries = [
+    `serviceName eq '${esc1}' and type eq 'Consumption'`,
+    `productName eq '${esc1}' and type eq 'Consumption'`,
+    `meterName eq '${esc1}' and type eq 'Consumption'`,
+    `contains(productName, '${esc1}') and type eq 'Consumption'`,
+    `contains(meterName, '${esc1}') and type eq 'Consumption'`,
+    `contains(skuName, '${esc1}') and type eq 'Consumption'`,
+  ];
+  let items = [];
+  for (const f of tries){
+    try{
+      const j = await apiFetch(f);
+      if (j.Items?.length){ items.push(...j.Items); if (items.length > 50) break; }
+    }catch(e){ /* try next */ }
+  }
+  // Dedupe by meterId
+  const seen = new Set();
+  items = items.filter(i => { if (seen.has(i.meterId)) return false; seen.add(i.meterId); return true; });
+  // Filter by region if provided
+  if (region){
+    const r = region.toLowerCase();
+    items = items.filter(i => (i.armRegionName||'').toLowerCase().includes(r) || (i.location||'').toLowerCase().includes(r));
+  }
+  return items;
+}
+
+// ============================================
+// COMPARISON LOGIC (MCA perspective)
+// ============================================
+function compareEaVsMca(eaPrice, mcaPrice){
+  const ea = toNum(eaPrice), mca = toNum(mcaPrice);
+  if (!isNum(ea) || !isNum(mca) || ea === 0) return {diffPct: null, winner: 'N/A'};
+  const diff = mca - ea;
+  const diffPct = (diff / ea) * 100;
+  const winner = diff < 0 ? 'MCA cheaper' : diff > 0 ? 'MCA expensive' : 'Equal';
+  return {diffPct, winner};
+}
+
+function deltaCell(eaPrice, mcaPrice){
+  const {diffPct, winner} = compareEaVsMca(eaPrice, mcaPrice);
+  if (!isNum(diffPct)) return `<span class="badge neutral">N/A</span>`;
+  if (winner === 'MCA cheaper') return `<span class="badge good">MCA cheaper by ${Math.abs(diffPct).toFixed(2)}%</span>`;
+  if (winner === 'MCA expensive') return `<span class="badge bad">MCA expensive by ${Math.abs(diffPct).toFixed(2)}%</span>`;
+  return `<span class="badge neutral">Equal</span>`;
+}
+
+// ============================================
+// TIER (Graduated Pricing) detection
+// ============================================
+function buildTierItems(group, baseItem){
+  if (!group || group.length < 2 || !baseItem) return null;
+  const sameSku = group.filter(x => (x.type === 'Consumption' || !x.type)
+    && x.productId === baseItem.productId && x.skuId === baseItem.skuId && x.meterId === baseItem.meterId);
+  const distinctMins = new Set(sameSku.map(x => x.tierMinimumUnits || 0));
+  if (sameSku.length < 2 || distinctMins.size < 2) return null;
+  const seen = new Set(); const out = [];
+  for (const x of sameSku.slice().sort((a,b)=>(a.tierMinimumUnits||0)-(b.tierMinimumUnits||0))){
+    const k = x.tierMinimumUnits || 0;
+    if (!seen.has(k)){ seen.add(k); out.push(x); }
+  }
+  return out.length > 1 ? out : null;
+}
+
+function hasTiers(item){ return !!(item && item.tierMinimumUnits && item.tierMinimumUnits > 0); }
+
+function showTiers(items, opts){
+  // items: array of meter records with tierMinimumUnits values
+  // opts: { quantity, currency } for cost breakdown
+  const tiers = items.slice().sort((a,b) => (a.tierMinimumUnits||0) - (b.tierMinimumUnits||0));
+  if (!tiers.length){ alert('No tier data available.'); return; }
+  const qty = opts && isNum(opts.quantity) ? opts.quantity : null;
+  const ccy = (opts && opts.currency) || tiers[0]?.currencyCode || '';
+
+  let html = '';
+  if (isNum(qty)){
+    html += `<div style="margin-bottom:14px;padding:10px;background:var(--input-bg);border-radius:8px">
+      <div class="small">Total Quantity Used</div>
+      <div style="font-size:18px;font-weight:700">${money(qty)} ${esc(tiers[0]?.unitOfMeasure||'')}</div>
+    </div>`;
+  }
+  html += `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="background:var(--thead-bg)">
+      <th style="text-align:left;padding:8px">Tier</th>
+      <th style="text-align:left;padding:8px">Range</th>
+      <th style="text-align:right;padding:8px">Unit Price</th>
+      ${isNum(qty) ? '<th style="text-align:right;padding:8px">Qty in Tier</th><th style="text-align:right;padding:8px">Subtotal</th>' : ''}
+    </tr></thead><tbody>`;
+
+  let remaining = isNum(qty) ? qty : null;
+  let totalCost = 0;
+  tiers.forEach((t,i) => {
+    const min = t.tierMinimumUnits || 0;
+    const nextMin = tiers[i+1] ? tiers[i+1].tierMinimumUnits : null;
+    const rangeStr = nextMin != null ? `${min.toLocaleString()} – ${nextMin.toLocaleString()}` : `${min.toLocaleString()}+`;
+    const price = toNum(t.retailPrice);
+    let tierQty = null, subtotal = null;
+    if (isNum(remaining) && isNum(price)){
+      const tierCapacity = nextMin != null ? (nextMin - min) : Infinity;
+      const usedAtOrAbove = Math.max(0, qty - min);
+      tierQty = Math.min(usedAtOrAbove, tierCapacity);
+      if (!isFinite(tierQty)) tierQty = usedAtOrAbove;
+      subtotal = tierQty * price;
+      totalCost += subtotal;
+    }
+    html += `<tr style="border-bottom:1px solid var(--line)">
+      <td style="padding:8px"><strong>Tier ${i+1}</strong></td>
+      <td style="padding:8px" class="mono">${rangeStr}</td>
+      <td style="padding:8px;text-align:right" class="mono">${money(price)} ${esc(ccy)}</td>
+      ${isNum(qty) ? `<td style="padding:8px;text-align:right" class="mono">${isNum(tierQty) ? money(tierQty) : '-'}</td>
+        <td style="padding:8px;text-align:right" class="mono">${isNum(subtotal) ? money(subtotal) : '-'}</td>` : ''}
+    </tr>`;
+  });
+  html += '</tbody>';
+  if (isNum(qty)){
+    html += `<tfoot><tr style="background:var(--input-bg);font-weight:700">
+      <td colspan="4" style="padding:10px;text-align:right">Total Cost (graduated):</td>
+      <td style="padding:10px;text-align:right" class="mono">${money(totalCost)} ${esc(ccy)}</td>
+    </tr></tfoot>`;
+  }
+  html += '</table>';
+  $('tierBody').innerHTML = html;
+  $('tierModal').classList.add('show');
+}
+
+// Global tier cache for click handlers
+window.__tierData = {};
+window.showTiersFor = function(key){
+  const ctx = window.__tierData[key];
+  if (!ctx) return;
+  showTiers(ctx.items, {quantity: ctx.quantity, currency: ctx.currency});
+};
+
+// ============================================
+// TABLE RENDERING (shared 20-column structure)
+// ============================================
+function renderHeader(tableId){
+  $(tableId).querySelector('thead').innerHTML = '<tr>' + COLUMNS.map(c => `<th>${c}</th>`).join('') + '</tr>';
+}
+
+function rowHtml(r){
+  const tierKey = (r.meterId || Math.random().toString(36).slice(2)) + '-' + Math.random().toString(36).slice(2,8);
+  if (r.tierItems && r.tierItems.length > 1){
+    window.__tierData[tierKey] = {
+      items: r.tierItems,
+      quantity: toNum(r.qty),
+      currency: r.billingCurrency || getBillingCurrency()
+    };
+  }
+  const gradCell = r.tierItems && r.tierItems.length > 1
+    ? `Yes <button class="btn" onclick="showTiersFor('${tierKey}')">View Tiers</button>`
+    : 'No';
+  const verifyUrl = r.meterId
+    ? `https://prices.azure.com/api/retail/prices?currencyCode=${encodeURIComponent(getBillingCurrency())}&$filter=meterId%20eq%20'${encodeURIComponent(r.meterId)}'`
+    : '';
+  // EA UOM falls back to MCA UOM if missing (same meter, same unit)
+  const eaUomDisplay = r.eaUom || r.mcaUom || '';
+  return `<tr>
+    <td class="input-product-cell">${esc(r.inputProduct || '')}</td>
+    <td class="mono">${esc(r.inputPartNumber || '')}</td>
+    <td>${esc(r.productName || '')}</td>
+    <td>${esc(r.skuName || '')}</td>
+    <td>${esc(r.meterName || '')}</td>
+    <td class="mono col-meter-id">${esc(r.meterId || '')}</td>
+    <td>${esc(r.location || '')}</td>
+    <td>${esc(r.type || '')}</td>
+    <td>${esc(r.pricingCurrency || '')}</td>
+    <td>${esc(r.billingCurrency || getBillingCurrency())}</td>
+    <td class="mono">${isNum(toNum(r.qty)) ? money(toNum(r.qty)) : (r.qty || '-')}</td>
+    <td class="mono">${isNum(toNum(r.eaTotalCost)) ? money(toNum(r.eaTotalCost)) : '-'}</td>
+    <td class="mono">${isNum(toNum(r.eaUnitPrice)) ? money(toNum(r.eaUnitPrice)) : '-'}</td>
+    <td>${esc(eaUomDisplay)}</td>
+    <td class="mono">${isNum(toNum(r.mcaTotalCost)) ? money(toNum(r.mcaTotalCost)) : '-'}</td>
+    <td class="mono">${isNum(toNum(r.mcaUnitPrice)) ? money(toNum(r.mcaUnitPrice)) : '-'}</td>
+    <td>${esc(r.mcaUom || '')}</td>
+    <td>${gradCell}</td>
+    <td>${deltaCell(r.eaUnitPrice, r.mcaUnitPrice)}</td>
+    <td><div class="actions">
+      ${r.meterId ? `<button class="btn" data-copy="${esc(r.meterId)}">Copy ID</button>` : ''}
+      ${verifyUrl ? `<a class="btn" href="${esc(verifyUrl)}" target="_blank">Verify API</a>` : '<span class="small">N/A</span>'}
+    </div></td>
+  </tr>`;
+}
+
+function renderRows(tableId, rows){
+  $(tableId).querySelector('tbody').innerHTML = rows.map(rowHtml).join('') || `<tr><td colspan="20" class="small" style="text-align:center;padding:24px">No data</td></tr>`;
+}
+
+// ============================================
+// MANUAL SEARCH
+// ============================================
+async function runSearch(){
+  const q = $('searchInput').value.trim();
+  const regionInput = $('searchRegion').value.trim();
+  if (!q){ $('searchStatus').textContent = 'Enter a product name.'; return; }
+  $('searchStatus').textContent = 'Searching...';
+  try{
+    const split = splitProductString(q);
+    const region = split.region || regionInput;
+    // Cascading filters using parsed productName + sku/meter parts
+    const tryFilters = [];
+    if (split.productName) tryFilters.push(`productName eq '${split.productName.replace(/'/g,"''")}' and type eq 'Consumption'`);
+    if (split.middleParts[0]){
+      tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(skuName, '${split.middleParts[0].replace(/'/g,"''")}') and type eq 'Consumption'`);
+    }
+    if (split.middleParts.length){
+      const mp = split.middleParts[split.middleParts.length-1];
+      tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(meterName, '${mp.replace(/'/g,"''")}') and type eq 'Consumption'`);
+    }
+    if (split.productName) tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and type eq 'Consumption'`);
+    // Fallback to broad searches on full string
+    tryFilters.push(`contains(meterName, '${q.replace(/'/g,"''")}') and type eq 'Consumption'`);
+    tryFilters.push(`contains(skuName, '${q.replace(/'/g,"''")}') and type eq 'Consumption'`);
+
+    let items = [];
+    for (const f of tryFilters){
+      try{
+        const j = await apiFetch(f);
+        if (j.Items?.length){ items = j.Items.filter(x => x.type === 'Consumption' || !x.type); if (items.length) break; }
+      }catch(e){}
+    }
+    if (!items.length){
+      // Last-resort broad search via searchProducts
+      items = await searchProducts(split.productName || q, '');
+    }
+    if (!items.length){ $('searchStatus').textContent = 'No results found.'; lastSearchResults = []; renderRows('searchTbl', []); return; }
+
+    // Region narrowing
+    if (region){
+      const rl = region.toLowerCase();
+      const rlNoSpace = rl.replace(/\s+/g,'');
+      const f = items.filter(x => (x.location||'').toLowerCase() === rl
+        || (x.armRegionName||'').toLowerCase() === rlNoSpace
+        || (x.location||'').toLowerCase().includes(rl)
+        || (x.armRegionName||'').toLowerCase().includes(rlNoSpace));
+      if (f.length) items = f;
+    }
+    if (split.middleParts[0]){
+      const sku = split.middleParts[0].toLowerCase();
+      const f = items.filter(x => (x.skuName||'').toLowerCase().includes(sku) || (x.meterName||'').toLowerCase().includes(sku));
+      if (f.length) items = f;
+    }
+
+    // Group by meterId
+    const byMeter = new Map();
+    items.forEach(i => {
+      const k = i.meterId;
+      if (!byMeter.has(k)) byMeter.set(k, []);
+      byMeter.get(k).push(i);
+    });
+    const rows = [];
+    for (const [meterId, group] of byMeter){
+      const base = group.find(g => !g.tierMinimumUnits) || group[0];
+      rows.push({
+        inputProduct: q, inputPartNumber: '',
+        productName: base.productName, skuName: base.skuName,
+        meterName: base.meterName, meterId: base.meterId,
+        location: base.location, type: base.type,
+        pricingCurrency: base.currencyCode, billingCurrency: getBillingCurrency(),
+        qty: '', eaTotalCost: '', eaUnitPrice: '', eaUom: '',
+        mcaTotalCost: '', mcaUnitPrice: base.retailPrice, mcaUom: base.unitOfMeasure,
+        tierItems: buildTierItems(group, base),
+      });
+    }
+    lastSearchResults = rows;
+    renderRows('searchTbl', rows);
+    $('searchStatus').textContent = `Found ${rows.length} meter(s).`;
+  }catch(e){
+    $('searchStatus').textContent = `Error: ${e.message}`;
+  }
+}
+
+// ============================================
+// BULK LOOKUP
+// ============================================
+// Known Azure regions for parsing product strings like "...- AU Southeast"
+const KNOWN_REGIONS = ['AU East','AU Southeast','AU Central','AU Central 2','US East','US East 2','US West','US West 2','US West 3','US Central','US North Central','US South Central','US West Central','EU North','EU West','UK South','UK West','AP East','AP Southeast','JA East','JA West','IN Central','IN South','IN West','IN West Jio','BR South','CA Central','CA East','FR Central','FR South','DE West Central','DE North','NO East','NO West','CH North','CH West','UAE North','UAE Central','ZA North','ZA West','KR Central','KR South','SE Central','PL Central','IL Central','IT North','MX Central','SG East','MY West','NZ North','TW North'];
+
+function parseBulkInput(raw){
+  const lines = String(raw||'').split(/\r?\n/).map(l => l.replace(/^\uFEFF/,'').trim()).filter(Boolean);
+  if (!lines.length) return [];
+  // detect delimiter (tab or comma)
+  const delim = lines[0].includes('\t') ? '\t' : (lines[0].includes(',') ? ',' : null);
+  // detect header
+  const first = lines[0].toLowerCase();
+  const hasHeader = /\b(product|item.?name|service)\b/.test(first) && /(part|sku|number)/.test(first);
+  const start = hasHeader ? 1 : 0;
+  const out = [];
+  for (let i = start; i < lines.length; i++){
+    let cols = delim ? lines[i].split(delim).map(c => c.trim().replace(/^"|"$/g,'')) : [lines[i]];
+    const product = cols[0] || '';
+    const partNumber = (cols[1] || '').trim();
+    if (!product && !partNumber) continue;
+    out.push({product, partNumber});
+  }
+  // dedupe
+  const seen = new Set(); const uniq = [];
+  for (const r of out){
+    const k = `${r.product}|${r.partNumber}`;
+    if (seen.has(k)) continue;
+    seen.add(k); uniq.push(r);
+  }
+  return uniq;
+}
+
+function splitProductString(raw){
+  // "Premium SSD Managed Disks - P10 LRS - AU Southeast" → {productName, skuOrMeter, region}
+  const s = String(raw||'').trim();
+  let region = '';
+  for (const r of KNOWN_REGIONS){
+    const re = new RegExp(`\\s*-\\s*${r.replace(/ /g,'\\s+')}\\s*$`, 'i');
+    if (re.test(s)){ region = r; break; }
+  }
+  const stripped = region ? s.replace(new RegExp(`\\s*-\\s*${region.replace(/ /g,'\\s+')}\\s*$`,'i'),'').trim() : s;
+  const parts = stripped.split(/\s+-\s+/).map(p=>p.trim()).filter(Boolean);
+  return {
+    productName: parts[0] || stripped,
+    skuOrMeter: parts.slice(1).join(' - ') || '',
+    middleParts: parts.slice(1),
+    region,
+    full: s,
+  };
+}
+
+async function runBulk(){
+  const parsed = parseBulkInput($('bulkInput').value);
+  const globalRegion = $('bulkRegion').value.trim();
+  if (!parsed.length){ $('bulkStatus').textContent = 'Provide at least one product (one per line; tab/comma separates Product and PartNumber).'; return; }
+  $('bulkStatus').textContent = `Looking up ${parsed.length} product(s)...`;
+  const rows = [];
+  for (let idx=0; idx<parsed.length; idx++){
+    const {product, partNumber} = parsed[idx];
+    $('bulkStatus').textContent = `Processing ${idx+1}/${parsed.length}: ${product || partNumber}`;
+    try{
+      const split = splitProductString(product);
+      const region = split.region || globalRegion;
+      // Attempt multiple search strategies
+      const candidates = [];
+      const tryFilters = [];
+      if (split.productName) tryFilters.push(`productName eq '${split.productName.replace(/'/g,"''")}' and type eq 'Consumption'`);
+      if (split.productName) tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and type eq 'Consumption'`);
+      if (split.middleParts[0]) tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(skuName, '${split.middleParts[0].replace(/'/g,"''")}') and type eq 'Consumption'`);
+      if (split.middleParts.length){
+        const meterPart = split.middleParts[split.middleParts.length-1];
+        tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(meterName, '${meterPart.replace(/'/g,"''")}') and type eq 'Consumption'`);
+      }
+      let items = [];
+      for (const f of tryFilters){
+        try{
+          const j = await apiFetch(f);
+          if (j.Items?.length){ items = j.Items.filter(x => x.type === 'Consumption' || !x.type); if (items.length) break; }
+        }catch(e){}
+      }
+      if (!items.length){
+        rows.push({inputProduct: product, inputPartNumber: partNumber, productName: '(not found)',
+          mcaUnitPrice: '', mcaUom: '', billingCurrency: getBillingCurrency()});
+        continue;
+      }
+      // Region narrowing
+      if (region){
+        const rl = region.toLowerCase();
+        const rlNoSpace = rl.replace(/\s+/g,'');
+        const f = items.filter(x => (x.location||'').toLowerCase() === rl
+          || (x.armRegionName||'').toLowerCase() === rlNoSpace
+          || (x.location||'').toLowerCase().includes(rl)
+          || (x.armRegionName||'').toLowerCase().includes(rlNoSpace));
+        if (f.length) items = f;
+      }
+      // Narrow further by sku/meter words if provided
+      if (split.middleParts[0]){
+        const sku = split.middleParts[0].toLowerCase();
+        const f = items.filter(x => (x.skuName||'').toLowerCase().includes(sku) || (x.meterName||'').toLowerCase().includes(sku));
+        if (f.length) items = f;
+      }
+      // Group by meterId
+      const byMeter = new Map();
+      items.forEach(i => { if (!byMeter.has(i.meterId)) byMeter.set(i.meterId, []); byMeter.get(i.meterId).push(i); });
+      let count = 0;
+      for (const [meterId, group] of byMeter){
+        if (count++ >= 5) break;
+        const base = group.find(g => !g.tierMinimumUnits) || group[0];
+        rows.push({
+          inputProduct: product, inputPartNumber: partNumber,
+          productName: base.productName, skuName: base.skuName,
+          meterName: base.meterName, meterId: base.meterId,
+          location: base.location, type: base.type,
+          pricingCurrency: base.currencyCode, billingCurrency: getBillingCurrency(),
+          qty: '', eaTotalCost: '', eaUnitPrice: '', eaUom: '',
+          mcaTotalCost: '', mcaUnitPrice: base.retailPrice, mcaUom: base.unitOfMeasure,
+          tierItems: buildTierItems(group, base),
+        });
+      }
+    }catch(e){
+      rows.push({inputProduct: product, inputPartNumber: partNumber, productName: `Error: ${e.message}`, billingCurrency: getBillingCurrency()});
+    }
+  }
+  lastBulkResults = rows;
+  renderRows('bulkTbl', rows);
+  $('bulkStatus').textContent = `Done. ${rows.length} row(s) from ${parsed.length} input(s).`;
+}
+
+// ============================================
+// USAGE FILE ANALYSIS
+// ============================================
+async function parseFile(file){
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.json')){
+    const txt = await file.text();
+    return JSON.parse(txt);
+  }
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')){
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(ws, {defval: ''});
+  }
+  // CSV
+  const txt = await file.text();
+  const wb = XLSX.read(txt, {type:'string'});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, {defval: ''});
+}
+
+function normKey(s){ return String(s||'').replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[\s_\-\/]/g,''); }
+function pickField(row, candidates){
+  const keys = Object.keys(row);
+  const normMap = keys.map(k => ({k, n: normKey(k)}));
+  for (const c of candidates){
+    const cn = normKey(c);
+    const m = normMap.find(x => x.n === cn);
+    if (m){
+      const v = row[m.k];
+      if (v !== '' && v != null) return v;
+    }
+  }
+  return '';
+}
+
+async function runUsage(){
+  const file = $('usageFile').files?.[0];
+  const region = $('usageRegion').value.trim();
+  if (!file){ $('usageStatus').textContent = 'Choose a file first.'; return; }
+  $('usageStatus').textContent = 'Parsing file...';
+  let rawRows;
+  try{ rawRows = await parseFile(file); }
+  catch(e){ $('usageStatus').textContent = `Parse error: ${e.message}`; return; }
+  if (!rawRows?.length){ $('usageStatus').textContent = 'No rows found.'; return; }
+
+  // Normalise
+  const items = rawRows.map(r => {
+    const qty = toNum(pickField(r, ['Quantity','Qty','UsageQuantity','quantity','BillableQuantity']));
+    const eaTotalCost = toNum(pickField(r, ['Cost','PreTaxCost','Total Cost','TotalCost','EA Total Cost','cost','CostInBillingCurrency']));
+    let eaUnitPrice = toNum(pickField(r, ['UnitPrice','Unit Price','EA Unit Price','EffectivePrice','unitPrice','EAUnitPrice','PricePerUnit']));
+    // Fallback: compute unit price from cost / quantity
+    if (!isNum(eaUnitPrice) && isNum(eaTotalCost) && isNum(qty) && qty !== 0){
+      eaUnitPrice = eaTotalCost / qty;
+    }
+    return {
+      inputProduct: pickField(r, ['Item Name','ItemName','Product','ProductName','MeterCategory','Service','itemName']),
+      inputPartNumber: pickField(r, ['Part Number','PartNumber','SKU','SkuId','partNumber','SKUID']),
+      meterId: String(pickField(r, ['MeterId','Meter ID','meterId'])).trim(),
+      meterName: pickField(r, ['MeterName','Meter Name','meterName']),
+      skuName: pickField(r, ['SkuName','SKU Name','skuName']),
+      location: pickField(r, ['Location','MeterRegion','ResourceLocation','location','MeterLocation']),
+      armRegionName: pickField(r, ['armRegionName','ResourceLocationNormalized','ResourceLocation','MeterRegion']),
+      type: pickField(r, ['Type','PriceType','priceType','ChargeType']) || 'Consumption',
+      qty,
+      eaTotalCost,
+      eaUnitPrice,
+      eaUom: pickField(r, ['UnitOfMeasure','Unit Of Measure','UOM','EA UOM','unitOfMeasure']),
+      pricingCurrency: pickField(r, ['PricingCurrency','Currency','currencyCode','BillingCurrency','BillingCurrencyCode']) || 'USD',
+    };
+  });
+
+  $('usageStatus').textContent = `Parsed ${items.length} rows. Looking up MCA-E retail prices...`;
+
+  // Group by meterId (or by name+sku+location if no meterId)
+  const groups = new Map();
+  for (const it of items){
+    const key = it.meterId || `${it.inputProduct}|${it.skuName}|${it.location}`;
+    if (!groups.has(key)){
+      groups.set(key, {...it, qty: it.qty || 0, eaTotalCost: it.eaTotalCost || 0});
+    } else {
+      const g = groups.get(key);
+      g.qty = (g.qty || 0) + (it.qty || 0);
+      g.eaTotalCost = (g.eaTotalCost || 0) + (it.eaTotalCost || 0);
+      // Preserve first non-empty values for descriptive fields
+      if (!g.eaUnitPrice && isNum(it.eaUnitPrice)) g.eaUnitPrice = it.eaUnitPrice;
+      if (!g.eaUom && it.eaUom) g.eaUom = it.eaUom;
+      if (!g.meterName && it.meterName) g.meterName = it.meterName;
+      if (!g.skuName && it.skuName) g.skuName = it.skuName;
+      if (!g.location && it.location) g.location = it.location;
+      if (!g.armRegionName && it.armRegionName) g.armRegionName = it.armRegionName;
+      if (!g.inputPartNumber && it.inputPartNumber) g.inputPartNumber = it.inputPartNumber;
+    }
+  }
+  // After grouping, recompute eaUnitPrice from totals if still missing
+  for (const g of groups.values()){
+    if (!isNum(g.eaUnitPrice) && isNum(g.eaTotalCost) && isNum(g.qty) && g.qty !== 0){
+      g.eaUnitPrice = g.eaTotalCost / g.qty;
+    }
+  }
+
+  // Lookup MCA-E for each
+  const rows = [];
+  let idx = 0;
+  for (const g of groups.values()){
+    idx++;
+    if (idx % 10 === 0) $('usageStatus').textContent = `Looking up ${idx}/${groups.size}...`;
+    let apiItem = null, tierItems = null;
+    try{
+      let api = null;
+      if (g.meterId){
+        api = await apiFetch(`meterId eq '${g.meterId.replace(/'/g,"''")}'`);
+      }
+      if (!api?.Items?.length && g.inputProduct){
+        api = await apiFetch(`contains(productName, '${String(g.inputProduct).replace(/'/g,"''")}')`);
+      }
+      const list = (api?.Items || []).filter(x => x.type === 'Consumption' || !x.type);
+      if (list.length){
+        // Prefer per-row location from the usage file; fall back to global region filter
+        let pool = list;
+        const rowLoc = (g.location || '').toLowerCase().trim();
+        const rowArm = (g.armRegionName || '').toLowerCase().trim();
+        if (rowArm){
+          const f = list.filter(x => (x.armRegionName||'').toLowerCase() === rowArm);
+          if (f.length) pool = f;
+        } else if (rowLoc){
+          const f = list.filter(x => (x.location||'').toLowerCase() === rowLoc);
+          if (f.length) pool = f;
+          else {
+            const f2 = list.filter(x => (x.location||'').toLowerCase().includes(rowLoc) || (x.armRegionName||'').toLowerCase().includes(rowLoc.replace(/\s+/g,'')));
+            if (f2.length) pool = f2;
+          }
+        } else if (region){
+          const rl = region.toLowerCase();
+          const f = list.filter(x => (x.armRegionName||'').toLowerCase().includes(rl) || (x.location||'').toLowerCase().includes(rl));
+          if (f.length) pool = f;
+        }
+        apiItem = pool.find(x => !x.tierMinimumUnits) || pool[0];
+        tierItems = buildTierItems(pool, apiItem);
+      }
+    }catch(e){ /* skip */ }
+
+    const billingCcy = getBillingCurrency();
+    const mcaUnitPrice = apiItem?.retailPrice ?? null;
+    const mcaTotalCost = (isNum(mcaUnitPrice) && isNum(g.qty)) ? mcaUnitPrice * g.qty : null;
+
+    rows.push({
+      inputProduct: g.inputProduct,
+      inputPartNumber: g.inputPartNumber,
+      productName: apiItem?.productName || '',
+      skuName: apiItem?.skuName || g.skuName || '',
+      meterName: apiItem?.meterName || g.meterName || '',
+      meterId: apiItem?.meterId || g.meterId || '',
+      location: apiItem?.location || g.location || '',
+      type: apiItem?.type || g.type || 'Consumption',
+      pricingCurrency: g.pricingCurrency || apiItem?.currencyCode || '',
+      billingCurrency: billingCcy,
+      qty: g.qty,
+      eaTotalCost: g.eaTotalCost,
+      eaUnitPrice: g.eaUnitPrice,
+      eaUom: g.eaUom,
+      mcaTotalCost,
+      mcaUnitPrice,
+      mcaUom: apiItem?.unitOfMeasure || '',
+      tierItems,
+    });
+  }
+
+  lastUsageResults = rows;
+  renderRows('usageTbl', rows);
+
+  // Summary
+  const matched = rows.filter(r => isNum(r.mcaUnitPrice)).length;
+  const cheaper = rows.filter(r => compareEaVsMca(r.eaUnitPrice, r.mcaUnitPrice).winner === 'MCA cheaper').length;
+  const expensive = rows.filter(r => compareEaVsMca(r.eaUnitPrice, r.mcaUnitPrice).winner === 'MCA expensive').length;
+  $('usageSummary').style.display = 'grid';
+  $('usageSummary').innerHTML = `
+    <div class="card"><div class="label">Source Rows</div><div class="value">${rawRows.length.toLocaleString()}</div><div class="hint">Raw usage records</div></div>
+    <div class="card"><div class="label">Grouped Items</div><div class="value">${rows.length.toLocaleString()}</div><div class="hint">Unique meters</div></div>
+    <div class="card"><div class="label">MCA Cheaper / Expensive</div><div class="value">${cheaper} / ${expensive}</div><div class="hint">${matched} matched to retail</div></div>
+  `;
+  $('usageStatus').textContent = `Done. ${rows.length} rows; ${matched} matched to retail prices.`;
+}
+
+// ============================================
+// CSV EXPORT
+// ============================================
+function toCsv(rows){
+  const headers = COLUMNS;
+  const out = [headers.join(',')];
+  rows.forEach(r => {
+    const cmp = compareEaVsMca(r.eaUnitPrice, r.mcaUnitPrice);
+    const deltaTxt = cmp.winner === 'MCA cheaper' ? `MCA cheaper by ${Math.abs(cmp.diffPct).toFixed(2)}%`
+      : cmp.winner === 'MCA expensive' ? `MCA expensive by ${Math.abs(cmp.diffPct).toFixed(2)}%`
+      : (cmp.winner === 'Equal' ? 'Equal' : 'N/A');
+    const cells = [
+      r.inputProduct, r.inputPartNumber, r.productName, r.skuName, r.meterName,
+      r.meterId, r.location, r.type, r.pricingCurrency, r.billingCurrency || getBillingCurrency(),
+      r.qty, r.eaTotalCost, r.eaUnitPrice, r.eaUom, r.mcaTotalCost,
+      r.mcaUnitPrice, r.mcaUom,
+      (r.tierItems && r.tierItems.length > 1) ? 'Yes' : 'No',
+      deltaTxt,
+      r.meterId || ''
+    ];
+    out.push(cells.map(c => {
+      const s = String(c ?? '');
+      return /[,"\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+    }).join(','));
+  });
+  return out.join('\n');
+}
+
+function downloadCsv(rows, filename){
+  if (!rows.length){ alert('No data to export.'); return; }
+  const blob = new Blob([toCsv(rows)], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ============================================
+// COPY-TO-CLIPBOARD (delegated)
+// ============================================
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  const v = btn.getAttribute('data-copy');
+  try{
+    await navigator.clipboard.writeText(v);
+    const orig = btn.textContent; btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 1200);
+  }catch(e){ alert('Copy failed: ' + e.message); }
+});
+
+// ============================================
+// WIRE UP EVENTS
+// ============================================
+initSelectors();
+['searchTbl','bulkTbl','usageTbl'].forEach(renderHeader);
+
+$('btnSearch').addEventListener('click', runSearch);
+$('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
+$('btnBulk').addEventListener('click', runBulk);
+$('btnUsage').addEventListener('click', runUsage);
+
+$('btnSearchCsv').addEventListener('click', () => downloadCsv(lastSearchResults, 'manual-search.csv'));
+$('btnBulkCsv').addEventListener('click', () => downloadCsv(lastBulkResults, 'bulk-lookup.csv'));
+$('btnUsageCsv').addEventListener('click', () => downloadCsv(lastUsageResults, 'usage-analysis.csv'));
+
+// Click outside modal to close
+$('tierModal').addEventListener('click', (e) => { if (e.target.id === 'tierModal') e.target.classList.remove('show'); });
+
+// Initial empty render
+renderRows('searchTbl', []);
+renderRows('bulkTbl', []);
+renderRows('usageTbl', []);
+</script>
+</body>
+</html>

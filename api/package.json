@@ -1,0 +1,7 @@
+{
+  "name": "azure-pricing-api",
+  "version": "1.0.0",
+  "description": "Azure Retail Prices proxy for SWA",
+  "main": "prices/index.js",
+  "engines": { "node": ">=18" }
+}
