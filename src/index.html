@@ -93,6 +93,7 @@ input[type="file"]::file-selector-button{border:1px solid var(--line);background
   <div class="hero-actions">
     <div><label>Billing Country</label><select id="country"></select></div>
     <div><label>Billing Currency</label><select id="billingCcy"></select></div>
+    <div><label>ACD % <span style="opacity:.6;font-size:11px">(off MCA-E)</span></label><input id="acdPct" type="number" min="0" max="100" step="0.01" value="0" style="width:90px"/></div>
     <div><label>Theme</label><select id="theme"><option value="dark">Dark</option><option value="light">Light</option></select></div>
   </div>
 </div>
@@ -389,6 +390,8 @@ const money = (n) => isNum(n) ? n.toLocaleString(undefined, {minimumFractionDigi
 const pct = (n) => isNum(n) ? `${n.toFixed(2)}%` : '-';
 
 function getBillingCurrency(){ return $('billingCcy').value || 'AUD'; }
+function getAcdPct(){ const v = parseFloat($('acdPct')?.value); return (isFinite(v) && v > 0 && v < 100) ? v : 0; }
+function applyAcd(price){ const p = getAcdPct(); return (isNum(price) && p) ? price * (1 - p/100) : price; }
 
 // ============================================
 // THEME + COUNTRY/CURRENCY INIT
@@ -514,6 +517,24 @@ function buildTierItems(group, baseItem){
 }
 
 function hasTiers(item){ return !!(item && item.tierMinimumUnits && item.tierMinimumUnits > 0); }
+
+// Compute total cost for a graduated meter across applicable tiers based on actual quantity.
+// tiers must already be deduped + sorted ascending by tierMinimumUnits (as buildTierItems returns).
+function computeGraduatedCost(tiers, qty){
+  if (!tiers || !tiers.length || !isNum(qty) || qty <= 0) return null;
+  const sorted = tiers.slice().sort((a,b) => (a.tierMinimumUnits||0) - (b.tierMinimumUnits||0));
+  let cost = 0;
+  for (let i = 0; i < sorted.length; i++){
+    const t = sorted[i];
+    const min = t.tierMinimumUnits || 0;
+    if (qty <= min) break;
+    const next = sorted[i+1];
+    const max = next ? (next.tierMinimumUnits || 0) : Infinity;
+    const inTier = Math.min(qty, max) - min;
+    cost += inTier * (t.retailPrice || 0);
+  }
+  return cost;
+}
 
 function showTiers(items, opts){
   // items: array of meter records with tierMinimumUnits values
@@ -709,7 +730,7 @@ async function runSearch(){
         location: base.location, type: base.type,
         pricingCurrency: base.currencyCode, billingCurrency: getBillingCurrency(),
         qty: '', eaTotalCost: '', eaUnitPrice: '', eaUom: '',
-        mcaTotalCost: '', mcaUnitPrice: base.retailPrice, mcaUom: base.unitOfMeasure,
+        mcaTotalCost: '', mcaUnitPrice: applyAcd(base.retailPrice), mcaUom: base.unitOfMeasure,
         tierItems: buildTierItems(group, base),
       });
     }
@@ -837,7 +858,7 @@ async function runBulk(){
           location: base.location, type: base.type,
           pricingCurrency: base.currencyCode, billingCurrency: getBillingCurrency(),
           qty: '', eaTotalCost: '', eaUnitPrice: '', eaUom: '',
-          mcaTotalCost: '', mcaUnitPrice: base.retailPrice, mcaUom: base.unitOfMeasure,
+          mcaTotalCost: '', mcaUnitPrice: applyAcd(base.retailPrice), mcaUom: base.unitOfMeasure,
           tierItems: buildTierItems(group, base),
         });
       }
@@ -1132,8 +1153,21 @@ async function runUsage(){
     }catch(e){ /* skip */ }
 
     const billingCcy = getBillingCurrency();
-    const mcaUnitPrice = apiItem?.retailPrice ?? null;
-    const mcaTotalCost = (isNum(mcaUnitPrice) && isNum(g.qty)) ? mcaUnitPrice * g.qty : null;
+    let mcaUnitPrice = apiItem?.retailPrice ?? null;
+    let mcaTotalCost = (isNum(mcaUnitPrice) && isNum(g.qty)) ? mcaUnitPrice * g.qty : null;
+    // Graduated pricing: compute total across tiers based on actual quantity.
+    if (tierItems && tierItems.length > 1 && isNum(g.qty) && g.qty > 0){
+      const grad = computeGraduatedCost(tierItems, g.qty);
+      if (grad !== null){
+        mcaTotalCost = grad;
+        mcaUnitPrice = grad / g.qty; // effective unit price
+      }
+    }
+    // Apply Azure Commitment Discount (ACD %) off MCA-E
+    if (getAcdPct() > 0){
+      if (isNum(mcaUnitPrice)) mcaUnitPrice = applyAcd(mcaUnitPrice);
+      if (isNum(mcaTotalCost)) mcaTotalCost = applyAcd(mcaTotalCost);
+    }
 
     rows.push({
       inputProduct: g.inputProduct,
