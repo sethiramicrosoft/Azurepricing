@@ -865,11 +865,173 @@ async function parseFile(file){
     const ws = wb.Sheets[wb.SheetNames[0]];
     return XLSX.utils.sheet_to_json(ws, {defval: ''});
   }
-  // CSV
+  // CSV — handled via streamCSV in runUsage; this fallback keeps parseFile usable elsewhere
   const txt = await file.text();
-  const wb = XLSX.read(txt, {type:'string'});
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(ws, {defval: ''});
+  return parseCSVAllAtOnce(txt);
+}
+
+function parseCSVAllAtOnce(txt){
+  if (txt.charCodeAt(0) === 0xFEFF) txt = txt.slice(1);
+  const rows = [];
+  let field = '', row = [], inQuotes = false;
+  const len = txt.length;
+  for (let i = 0; i < len; i++){
+    const c = txt[i];
+    if (inQuotes){
+      if (c === '"'){
+        if (txt[i+1] === '"'){ field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ','){ row.push(field); field = ''; }
+      else if (c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; }
+      else if (c === '\r'){ /* skip */ }
+      else field += c;
+    }
+  }
+  if (field.length || row.length){ row.push(field); rows.push(row); }
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => String(h||'').trim());
+  const out = new Array(rows.length - 1);
+  for (let r = 1; r < rows.length; r++){
+    const obj = {};
+    const src = rows[r];
+    for (let j = 0; j < headers.length; j++) obj[headers[j]] = src[j] !== undefined ? src[j] : '';
+    out[r-1] = obj;
+  }
+  return out;
+}
+
+// Streaming CSV parser — handles GB-scale files without loading full text into memory.
+// Calls onRow(rowObject) per data row. onProgress(bytesRead, totalBytes) periodically.
+async function streamCSV(file, onRow, onProgress){
+  const stream = file.stream().pipeThrough(new TextDecoderStream('utf-8'));
+  const reader = stream.getReader();
+  let buf = '';
+  let headers = null;
+  let bytesRead = 0;
+  const total = file.size || 0;
+  let firstChunk = true;
+  let lastTick = performance.now();
+  while (true){
+    const {value, done} = await reader.read();
+    if (done) break;
+    let chunk = value;
+    bytesRead += chunk.length;
+    if (firstChunk){
+      if (chunk.charCodeAt(0) === 0xFEFF) chunk = chunk.slice(1);
+      firstChunk = false;
+    }
+    buf += chunk;
+    // Extract complete lines, respecting quoted fields that may span lines.
+    let lineStart = 0;
+    let inQuotes = false;
+    for (let i = 0; i < buf.length; i++){
+      const c = buf.charCodeAt(i);
+      if (c === 34 /* " */){
+        if (inQuotes && buf.charCodeAt(i+1) === 34){ i++; continue; }
+        inQuotes = !inQuotes;
+      } else if (c === 10 /* \n */ && !inQuotes){
+        const end = (i > 0 && buf.charCodeAt(i-1) === 13) ? i - 1 : i;
+        const line = buf.slice(lineStart, end);
+        if (line.length){
+          const fields = parseCSVLine(line);
+          if (!headers) headers = fields.map(h => String(h||'').trim());
+          else {
+            const obj = {};
+            for (let j = 0; j < headers.length; j++) obj[headers[j]] = fields[j] !== undefined ? fields[j] : '';
+            onRow(obj);
+          }
+        }
+        lineStart = i + 1;
+      }
+    }
+    buf = buf.slice(lineStart);
+    const now = performance.now();
+    if (onProgress && now - lastTick > 200){
+      onProgress(bytesRead, total);
+      lastTick = now;
+      // Yield to UI
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+  // Flush trailing line
+  if (buf.length){
+    const line = buf.replace(/\r$/, '');
+    if (line.length){
+      const fields = parseCSVLine(line);
+      if (!headers) headers = fields.map(h => String(h||'').trim());
+      else {
+        const obj = {};
+        for (let j = 0; j < headers.length; j++) obj[headers[j]] = fields[j] !== undefined ? fields[j] : '';
+        onRow(obj);
+      }
+    }
+  }
+  if (onProgress) onProgress(bytesRead, total);
+}
+
+function parseCSVLine(line){
+  const out = [];
+  let field = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++){
+    const c = line[i];
+    if (inQuotes){
+      if (c === '"'){
+        if (line[i+1] === '"'){ field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ','){ out.push(field); field = ''; }
+      else field += c;
+    }
+  }
+  out.push(field);
+  return out;
+}
+
+function normalizeUsageRow(r){
+  const qty = toNum(pickField(r, ['Quantity','Qty','UsageQuantity','quantity','BillableQuantity']));
+  const eaTotalCost = toNum(pickField(r, ['Cost','PreTaxCost','Total Cost','TotalCost','EA Total Cost','cost','CostInBillingCurrency']));
+  let eaUnitPrice = toNum(pickField(r, ['UnitPrice','Unit Price','EA Unit Price','EffectivePrice','unitPrice','EAUnitPrice','PricePerUnit']));
+  if (!isNum(eaUnitPrice) && isNum(eaTotalCost) && isNum(qty) && qty !== 0){
+    eaUnitPrice = eaTotalCost / qty;
+  }
+  return {
+    inputProduct: pickField(r, ['Item Name','ItemName','Product','ProductName','MeterCategory','Service','itemName']),
+    inputPartNumber: pickField(r, ['Part Number','PartNumber','SKU','SkuId','partNumber','SKUID']),
+    meterId: String(pickField(r, ['MeterId','Meter ID','meterId'])).trim(),
+    meterName: pickField(r, ['MeterName','Meter Name','meterName']),
+    skuName: pickField(r, ['SkuName','SKU Name','skuName']),
+    location: pickField(r, ['Location','MeterRegion','ResourceLocation','location','MeterLocation']),
+    armRegionName: pickField(r, ['armRegionName','ResourceLocationNormalized','ResourceLocation','MeterRegion']),
+    type: pickField(r, ['Type','PriceType','priceType','ChargeType']) || 'Consumption',
+    qty,
+    eaTotalCost,
+    eaUnitPrice,
+    eaUom: pickField(r, ['UnitOfMeasure','Unit Of Measure','UOM','EA UOM','unitOfMeasure']),
+    pricingCurrency: pickField(r, ['PricingCurrency','Currency','currencyCode','BillingCurrency','BillingCurrencyCode']) || 'USD',
+  };
+}
+
+function ingestIntoGroups(groups, item){
+  const key = item.meterId || `${item.inputProduct}|${item.skuName}|${item.location}`;
+  if (!groups.has(key)){
+    groups.set(key, {...item, qty: item.qty || 0, eaTotalCost: item.eaTotalCost || 0});
+  } else {
+    const g = groups.get(key);
+    g.qty = (g.qty || 0) + (item.qty || 0);
+    g.eaTotalCost = (g.eaTotalCost || 0) + (item.eaTotalCost || 0);
+    if (!g.eaUnitPrice && isNum(item.eaUnitPrice)) g.eaUnitPrice = item.eaUnitPrice;
+    if (!g.eaUom && item.eaUom) g.eaUom = item.eaUom;
+    if (!g.meterName && item.meterName) g.meterName = item.meterName;
+    if (!g.skuName && item.skuName) g.skuName = item.skuName;
+    if (!g.location && item.location) g.location = item.location;
+    if (!g.armRegionName && item.armRegionName) g.armRegionName = item.armRegionName;
+    if (!g.inputPartNumber && item.inputPartNumber) g.inputPartNumber = item.inputPartNumber;
+  }
 }
 
 function normKey(s){ return String(s||'').replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[\s_\-\/]/g,''); }
@@ -891,66 +1053,42 @@ async function runUsage(){
   const file = $('usageFile').files?.[0];
   const region = $('usageRegion').value.trim();
   if (!file){ $('usageStatus').textContent = 'Choose a file first.'; return; }
-  $('usageStatus').textContent = 'Parsing file...';
-  let rawRows;
-  try{ rawRows = await parseFile(file); }
-  catch(e){ $('usageStatus').textContent = `Parse error: ${e.message}`; return; }
-  if (!rawRows?.length){ $('usageStatus').textContent = 'No rows found.'; return; }
 
-  // Normalise
-  const items = rawRows.map(r => {
-    const qty = toNum(pickField(r, ['Quantity','Qty','UsageQuantity','quantity','BillableQuantity']));
-    const eaTotalCost = toNum(pickField(r, ['Cost','PreTaxCost','Total Cost','TotalCost','EA Total Cost','cost','CostInBillingCurrency']));
-    let eaUnitPrice = toNum(pickField(r, ['UnitPrice','Unit Price','EA Unit Price','EffectivePrice','unitPrice','EAUnitPrice','PricePerUnit']));
-    // Fallback: compute unit price from cost / quantity
-    if (!isNum(eaUnitPrice) && isNum(eaTotalCost) && isNum(qty) && qty !== 0){
-      eaUnitPrice = eaTotalCost / qty;
-    }
-    return {
-      inputProduct: pickField(r, ['Item Name','ItemName','Product','ProductName','MeterCategory','Service','itemName']),
-      inputPartNumber: pickField(r, ['Part Number','PartNumber','SKU','SkuId','partNumber','SKUID']),
-      meterId: String(pickField(r, ['MeterId','Meter ID','meterId'])).trim(),
-      meterName: pickField(r, ['MeterName','Meter Name','meterName']),
-      skuName: pickField(r, ['SkuName','SKU Name','skuName']),
-      location: pickField(r, ['Location','MeterRegion','ResourceLocation','location','MeterLocation']),
-      armRegionName: pickField(r, ['armRegionName','ResourceLocationNormalized','ResourceLocation','MeterRegion']),
-      type: pickField(r, ['Type','PriceType','priceType','ChargeType']) || 'Consumption',
-      qty,
-      eaTotalCost,
-      eaUnitPrice,
-      eaUom: pickField(r, ['UnitOfMeasure','Unit Of Measure','UOM','EA UOM','unitOfMeasure']),
-      pricingCurrency: pickField(r, ['PricingCurrency','Currency','currencyCode','BillingCurrency','BillingCurrencyCode']) || 'USD',
-    };
-  });
-
-  $('usageStatus').textContent = `Parsed ${items.length} rows. Looking up MCA-E retail prices...`;
-
-  // Group by meterId (or by name+sku+location if no meterId)
+  const isCSV = /\.csv$/i.test(file.name);
   const groups = new Map();
-  for (const it of items){
-    const key = it.meterId || `${it.inputProduct}|${it.skuName}|${it.location}`;
-    if (!groups.has(key)){
-      groups.set(key, {...it, qty: it.qty || 0, eaTotalCost: it.eaTotalCost || 0});
-    } else {
-      const g = groups.get(key);
-      g.qty = (g.qty || 0) + (it.qty || 0);
-      g.eaTotalCost = (g.eaTotalCost || 0) + (it.eaTotalCost || 0);
-      // Preserve first non-empty values for descriptive fields
-      if (!g.eaUnitPrice && isNum(it.eaUnitPrice)) g.eaUnitPrice = it.eaUnitPrice;
-      if (!g.eaUom && it.eaUom) g.eaUom = it.eaUom;
-      if (!g.meterName && it.meterName) g.meterName = it.meterName;
-      if (!g.skuName && it.skuName) g.skuName = it.skuName;
-      if (!g.location && it.location) g.location = it.location;
-      if (!g.armRegionName && it.armRegionName) g.armRegionName = it.armRegionName;
-      if (!g.inputPartNumber && it.inputPartNumber) g.inputPartNumber = it.inputPartNumber;
-    }
+  let totalRows = 0;
+
+  if (isCSV){
+    $('usageStatus').textContent = `Streaming CSV (${(file.size/1048576).toFixed(1)} MB)...`;
+    try {
+      await streamCSV(file, (r) => {
+        totalRows++;
+        ingestIntoGroups(groups, normalizeUsageRow(r));
+      }, (read, total) => {
+        const pct = total ? Math.floor(read*100/total) : 0;
+        $('usageStatus').textContent = `Streaming ${pct}% — ${totalRows.toLocaleString()} rows, ${groups.size.toLocaleString()} unique meters`;
+      });
+    } catch(e){ $('usageStatus').textContent = `Parse error: ${e.message}`; return; }
+  } else {
+    $('usageStatus').textContent = 'Parsing file...';
+    let rawRows;
+    try{ rawRows = await parseFile(file); }
+    catch(e){ $('usageStatus').textContent = `Parse error: ${e.message}`; return; }
+    if (!rawRows?.length){ $('usageStatus').textContent = 'No rows found.'; return; }
+    totalRows = rawRows.length;
+    for (const r of rawRows) ingestIntoGroups(groups, normalizeUsageRow(r));
   }
+
+  if (!groups.size){ $('usageStatus').textContent = 'No rows found.'; return; }
+
   // After grouping, recompute eaUnitPrice from totals if still missing
   for (const g of groups.values()){
     if (!isNum(g.eaUnitPrice) && isNum(g.eaTotalCost) && isNum(g.qty) && g.qty !== 0){
       g.eaUnitPrice = g.eaTotalCost / g.qty;
     }
   }
+
+  $('usageStatus').textContent = `Parsed ${totalRows.toLocaleString()} rows → ${groups.size.toLocaleString()} unique meters. Looking up MCA-E retail prices...`;
 
   // Lookup MCA-E for each
   const rows = [];
@@ -1028,7 +1166,7 @@ async function runUsage(){
   const expensive = rows.filter(r => compareEaVsMca(r.eaUnitPrice, r.mcaUnitPrice).winner === 'MCA expensive').length;
   $('usageSummary').style.display = 'grid';
   $('usageSummary').innerHTML = `
-    <div class="card"><div class="label">Source Rows</div><div class="value">${rawRows.length.toLocaleString()}</div><div class="hint">Raw usage records</div></div>
+    <div class="card"><div class="label">Source Rows</div><div class="value">${totalRows.toLocaleString()}</div><div class="hint">Raw usage records</div></div>
     <div class="card"><div class="label">Grouped Items</div><div class="value">${rows.length.toLocaleString()}</div><div class="hint">Unique meters</div></div>
     <div class="card"><div class="label">MCA Cheaper / Expensive</div><div class="value">${cheaper} / ${expensive}</div><div class="hint">${matched} matched to retail</div></div>
   `;
