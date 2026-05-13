@@ -137,6 +137,44 @@ input[type="file"]::file-selector-button:hover{background:var(--btn-bg-hover)}
 .tabs{display:flex;gap:0;margin-bottom:14px;border-bottom:1px solid var(--line)}
 .tab{padding:10px 12px;cursor:pointer;color:var(--muted);font-weight:600;font-size:14px;border-bottom:2px solid transparent;background:none;border-left:none;border-right:none;border-top:none}
 .tab.active{color:var(--text);border-bottom-color:var(--accent)}
+/* Virtual page mode: when an info page is active, hide the tab bar */
+body.virtual-page-active .tabs{display:none}
+.virtual-page-bar{display:none;align-items:center;justify-content:space-between;gap:12px;padding:12px 0 16px;border-bottom:1px solid var(--border);margin-bottom:18px}
+body.virtual-page-active .virtual-page-bar{display:flex}
+.virtual-page-bar .crumb{font-size:12px;color:var(--text-2);text-transform:uppercase;letter-spacing:.06em}
+.virtual-page-bar .back-btn{background:transparent;border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:var(--radius);cursor:pointer;font:inherit;font-weight:600;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.virtual-page-bar .back-btn:hover{background:var(--card);border-color:var(--accent);color:var(--accent)}
+/* Footer links */
+.footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+.footer-meta{flex:1 1 auto;min-width:0}
+.footer-links{display:flex;gap:6px;align-items:center;font-size:13px;flex:0 0 auto}
+.footer-links a{color:var(--accent);text-decoration:none;padding:4px 6px;border-radius:4px}
+.footer-links a:hover{text-decoration:underline;background:var(--bg)}
+.footer-links .dot{color:var(--text-2);opacity:.5}
+/* Info pages (About / How to Use / How It's Built) */
+.info-page{max-width:980px;margin:0 auto;padding:8px 4px 32px}
+.info-page h1{font-size:28px;font-weight:600;margin:0 0 6px;color:var(--text);letter-spacing:-.01em}
+.info-page .lede{font-size:15px;color:var(--text-2);margin:0 0 28px;line-height:1.6}
+.info-page h2{font-size:18px;font-weight:600;margin:32px 0 12px;color:var(--text);display:flex;align-items:center;gap:10px}
+.info-page h2::before{content:"";display:inline-block;width:4px;height:18px;background:var(--accent);border-radius:2px}
+.info-page h3{font-size:15px;font-weight:600;margin:18px 0 8px;color:var(--text)}
+.info-page p,.info-page li{font-size:14px;line-height:1.65;color:var(--text)}
+.info-page ul,.info-page ol{padding-left:22px;margin:8px 0}
+.info-page li{margin:4px 0}
+.info-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin:14px 0}
+.info-card.accent{border-left:4px solid var(--accent)}
+.info-card.warn{border-left:4px solid var(--warn-border);background:var(--warn-bg)}
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:14px 0}
+.info-grid .info-card{margin:0}
+.kbd{font-family:Consolas,monospace;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:12px}
+.step{display:flex;gap:14px;align-items:flex-start;margin:14px 0;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius)}
+.step-num{flex:0 0 32px;width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;font-weight:600;display:inline-flex;align-items:center;justify-content:center;font-size:14px}
+.step-body{flex:1}
+.step-body h3{margin:0 0 4px}
+.tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--accent);color:#fff;letter-spacing:.02em}
+.tag.muted{background:var(--text-2)}
+.stack-row{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.stack-row span{font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:14px;background:var(--bg);color:var(--text)}
 .tab:hover{color:var(--text);background:var(--row-hover)}
 .pane{display:none}
 .pane.active{display:block}
@@ -192,6 +230,14 @@ html[data-theme='dark'] .disclaimer-bar .toggle:hover{background:rgba(255,255,25
   <div class="tab active" data-pane="manual">Manual Search</div>
   <div class="tab" data-pane="bulk">Bulk Lookup</div>
   <div class="tab" data-pane="usage">Usage File Analysis</div>
+</div>
+
+<!-- Shown only when a virtual page (About / How to / Built) is active -->
+<div class="virtual-page-bar" id="virtualPageBar">
+  <span class="crumb" id="virtualPageCrumb">About</span>
+  <button class="back-btn" id="virtualPageBack" type="button" aria-label="Back to app">
+    &larr; Back to app
+  </button>
 </div>
 
 <!-- ============ MANUAL SEARCH ============ -->
@@ -279,7 +325,205 @@ html[data-theme='dark'] .disclaimer-bar .toggle:hover{background:rgba(255,255,25
   </div>
 </div>
 
-<div class="footer">Verify links open raw Azure Retail Prices API results for the selected meter ID in the chosen billing currency.</div>
+<!-- ============ ABOUT (virtual page) ============ -->
+<div class="pane" id="paneAbout">
+  <div class="info-page">
+    <h1>About this tool</h1>
+    <p class="lede">A side-by-side comparison of <strong>Microsoft Enterprise Agreement (EA)</strong> pricing against <strong>Microsoft Customer Agreement &mdash; Enterprise (MCA-E)</strong> retail pricing for Azure services. Designed to help sellers, finance teams, and customers understand the cost impact of moving from EA to MCA-E.</p>
+
+    <div class="info-grid">
+      <div class="info-card accent">
+        <h3>What it does</h3>
+        <p>Looks up live Azure Retail prices and compares them with EA pricing you supply (either by entering a SKU or uploading a usage export). Handles graduated tiers, Reservations (1Y/3Y, upfront and monthly), Savings Plans, and Spot.</p>
+      </div>
+      <div class="info-card accent">
+        <h3>What it doesn't do</h3>
+        <p>It does not access your Azure account, store any data, or apply your specific commercial discounts unless you enter them (ACD %). All processing happens in your browser.</p>
+      </div>
+      <div class="info-card accent">
+        <h3>Data sources</h3>
+        <p>Pricing comes from the public <strong>Azure Retail Prices API</strong> (<span class="kbd">prices.azure.com</span>). EA prices come from your own input/files. No third-party services.</p>
+      </div>
+      <div class="info-card accent">
+        <h3>Privacy</h3>
+        <p>The app runs locally. Files you upload are parsed in the browser and never sent anywhere. The only outbound call is to the Microsoft pricing API.</p>
+      </div>
+    </div>
+
+    <h2>Audience</h2>
+    <ul>
+      <li><strong>Sellers / CSAs</strong> &mdash; quickly model EA-to-MCA-E migrations</li>
+      <li><strong>Finance / FinOps</strong> &mdash; understand cost impact of agreement changes</li>
+      <li><strong>Customers</strong> &mdash; sanity-check MCA-E quotes against current EA rates</li>
+    </ul>
+
+    <h2>Status</h2>
+    <div class="info-card">
+      <p><span class="tag">Internal tool</span> &nbsp; <span class="tag muted">Non-authoritative</span></p>
+      <p style="margin-top:10px">This is an independently developed tool. It is <strong>not endorsed, supported, or maintained by Microsoft</strong>. Always verify figures against your official Microsoft pricing documents and Azure invoices before acting on them. See the disclaimer banner at the bottom of every screen for full terms.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ HOW TO USE (virtual page) ============ -->
+<div class="pane" id="paneHowto">
+  <div class="info-page">
+    <h1>How to use</h1>
+    <p class="lede">Three modes for three workflows &mdash; from a quick single lookup to a full usage-file analysis.</p>
+
+    <h2>Pick your mode</h2>
+    <div class="info-grid">
+      <div class="info-card">
+        <h3>Manual Search</h3>
+        <p>Best for: quickly checking a single product or SKU. Type a product/SKU name (e.g. <em>"Premium SSD P10"</em>), optional region, hit Search.</p>
+      </div>
+      <div class="info-card">
+        <h3>Bulk Lookup</h3>
+        <p>Best for: pricing a list of known products. Paste up to a few hundred names, one per line. Each is looked up against the Retail API.</p>
+      </div>
+      <div class="info-card">
+        <h3>Usage File Analysis</h3>
+        <p>Best for: full EA-vs-MCA comparison. Upload a CSV/XLSX export of EA usage. EA prices come from the file; MCA-E prices are looked up live.</p>
+      </div>
+    </div>
+
+    <h2>Step-by-step (Usage File Analysis)</h2>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Set the global controls</h3>
+        <p>Pick your <strong>Country</strong> &rarr; this auto-selects <strong>Pricing Currency</strong> and <strong>Billing Currency</strong>. Set <strong>ACD %</strong> if you have an Azure Consumption Discount on MCA-E (e.g. <span class="kbd">10</span> for 10% off).</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Upload your usage file</h3>
+        <p>Go to <strong>Usage File Analysis</strong> &rarr; pick your CSV/XLSX. The tool reads <span class="kbd">MeterId</span>, <span class="kbd">Cost</span>, <span class="kbd">Quantity</span>, <span class="kbd">UnitPrice</span>, <span class="kbd">PricingModel</span>, <span class="kbd">ChargeType</span>, <span class="kbd">Term</span>, <span class="kbd">Frequency</span>, etc.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Click Analyze File</h3>
+        <p>Rows are grouped by <span class="kbd">MeterId + PricingModel + Term + ChargeType + Frequency</span> so OnDemand, Reservation, Savings Plan and Spot rows stay separate. The Retail API is then called for each unique meter.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Read the output</h3>
+        <p>For each meter you'll see: EA vs MCA-E unit price (with per-tier breakdown for graduated SKUs), totals, <strong>Comparable Delta %</strong> based on totals (not unit prices), and the row Type (e.g. <em>Reservation 3Y (Purchase &middot; Monthly)</em>).</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h3>Verify and export</h3>
+        <p>Click <strong>Verify API</strong> on any row to open the raw Retail API response in a new tab. Click <strong>Download CSV</strong> to export the comparison.</p>
+      </div>
+    </div>
+
+    <h2>Reading the comparison</h2>
+    <div class="info-card">
+      <h3>Type column</h3>
+      <ul>
+        <li><span class="kbd">OnDemand</span> &mdash; standard pay-as-you-go</li>
+        <li><span class="kbd">Reservation 3Y (Purchase &middot; Upfront)</span> &mdash; one-time RI payment compared to MCA upfront price</li>
+        <li><span class="kbd">Reservation 3Y (Purchase &middot; Monthly)</span> &mdash; monthly RI billing compared to MCA upfront &divide; 36</li>
+        <li><span class="kbd">*</span> suffix means the frequency was <strong>auto-detected</strong> (Frequency column was missing)</li>
+        <li><span class="kbd">SavingsPlan 1Y / 3Y</span> &mdash; per-hour rate from the savings plan API field</li>
+        <li><span class="kbd">Spot</span> &mdash; matched against Spot SKUs only</li>
+      </ul>
+    </div>
+    <div class="info-card">
+      <h3>Comparable Delta %</h3>
+      <p>For graduated/tiered SKUs, comparing unit prices is misleading because different quantities consume different tiers. The delta is therefore computed on <strong>EA Total Cost vs MCA-E Total Cost</strong>, which is the apples-to-apples figure.</p>
+    </div>
+    <div class="info-card warn">
+      <h3>$0 RI consumption rows</h3>
+      <p>If your file is an <em>Actual</em> export (not Amortized), Reservation Usage rows show <span class="kbd">Cost = 0</span> because the RI absorbed the cost. These rows are <strong>suppressed</strong> automatically &mdash; the Purchase rows carry the real cost.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ HOW I BUILT THIS (virtual page) ============ -->
+<div class="pane" id="paneBuilt">
+  <div class="info-page">
+    <h1>How I built this app</h1>
+    <p class="lede">A short architectural tour &mdash; what's under the hood, and why each piece is the way it is.</p>
+
+    <h2>Stack</h2>
+    <div class="stack-row">
+      <span>HTML5</span><span>Vanilla JavaScript (ES2020)</span><span>CSS Custom Properties (Fluent tokens)</span>
+      <span>SheetJS (XLSX)</span><span>Python 3 stdlib (launcher / proxy)</span><span>PyInstaller (EXE packaging)</span>
+      <span>Inno Setup (Windows installer)</span><span>Azure Static Web Apps (web hosting)</span><span>Azure Functions / Node 18 (web proxy)</span>
+    </div>
+
+    <h2>Architecture at a glance</h2>
+    <div class="info-card accent">
+      <h3>Local desktop app</h3>
+      <p>A single self-contained <span class="kbd">report.html</span> file plus a tiny Python launcher (<span class="kbd">launcher.py</span>) that serves the HTML on <span class="kbd">localhost</span> and proxies the Azure Retail Prices API to bypass browser CORS. Everything is bundled into a single <span class="kbd">.exe</span> with PyInstaller and wrapped in an Inno Setup installer.</p>
+    </div>
+    <div class="info-card accent">
+      <h3>Web version (Azure SWA)</h3>
+      <p>The same HTML hosted on Azure Static Web Apps, with the Python proxy reimplemented as a Node 18 Azure Function (<span class="kbd">/api/prices</span>). CI/CD via GitHub Actions; ~40 lines of Node, no dependencies.</p>
+    </div>
+
+    <h2>Key design decisions</h2>
+    <h3>Single-file SPA, no build step</h3>
+    <p>Whole app is one <span class="kbd">report.html</span> file with HTML/CSS/JS inline. No bundler, no framework, no <span class="kbd">node_modules</span>. Trade-off: no component reuse, but easy to deploy, easy to read, zero supply-chain risk.</p>
+
+    <h3>Why a CORS proxy was needed</h3>
+    <p>The Azure Retail Prices endpoint doesn't return CORS headers, so browsers block direct calls. A tiny passthrough on the same origin solves this &mdash; the browser sees a same-origin request and the server-to-server hop to <span class="kbd">prices.azure.com</span> isn't subject to CORS. Locally that's Python; on SWA it's a Node Function.</p>
+
+    <h3>Browser-side parsing</h3>
+    <p>Usage files (CSV/XLSX) are parsed entirely client-side &mdash; CSVs streamed in chunks via the File API, XLSX via SheetJS. No file ever leaves the browser. Chosen for privacy and to keep server cost at zero.</p>
+
+    <h3>Grouping that respects pricing model</h3>
+    <p>Lumping all rows for a single meter together produced wildly wrong results (mixing OnDemand with Reservation, monthly with upfront, etc.). The grouping key is now <span class="kbd">MeterId + PricingModel + Term + ChargeType + Frequency</span> so each economic model is compared like-for-like.</p>
+
+    <h3>Tiered/graduated pricing</h3>
+    <p>Many Azure meters have tiers (e.g. first 5 TB at one rate, next 50 TB cheaper, etc.). Showing a "blended unit price" was misleading, so the MCA-E unit cell renders each tier rate stacked in a single row, and the Comparable Delta % uses <strong>totals</strong> not unit prices.</p>
+
+    <h3>Reservation upfront vs monthly</h3>
+    <p>The Retail API only returns RI prices as full <strong>upfront</strong> amounts. Customers paying monthly see one month's installment in their EA file, which produced ~3,500% nonsense deltas before. The fix: read the <span class="kbd">Frequency</span> column (<span class="kbd">OneTime</span> vs <span class="kbd">Recurring</span>); if missing, auto-detect by comparing the EA cost-per-RI to <em>upfront</em> and <em>upfront / months</em>, picking the closer match. Monthly comparison divides MCA upfront by months in the term.</p>
+
+    <h3>Currency handling</h3>
+    <p>Country selection auto-derives Pricing and Billing currencies (using Microsoft's MCA FAQ table verbatim). The Retail API is queried in the chosen pricing currency; no FX maths in the app.</p>
+
+    <h3>Sticky legal disclaimer</h3>
+    <p>A non-dismissable (only collapsible) Fluent MessageBar at the bottom of every screen. Required because the tool produces non-authoritative pricing estimates and is not endorsed by Microsoft.</p>
+
+    <h2>What I'd do differently next time</h2>
+    <ul>
+      <li>Add automated tests for the pricing-model logic &mdash; the RI upfront/monthly bug would have been caught earlier.</li>
+      <li>Surface the input file's column mapping in the UI so users can confirm which columns the parser found.</li>
+      <li>Cache Retail API responses in the browser per session to speed up re-runs.</li>
+    </ul>
+
+    <h2>Repository &amp; deployment</h2>
+    <div class="info-card">
+      <ul>
+        <li><strong>Local app source:</strong> <span class="kbd">azure-pricing-final/</span> (HTML + Python launcher + PyInstaller spec + Inno Setup script)</li>
+        <li><strong>Web app source:</strong> <span class="kbd">azure-pricing-swa/</span> (mirror of the HTML + <span class="kbd">api/prices</span> Function + SWA config + GitHub Actions)</li>
+        <li><strong>Live URL:</strong> <a href="https://lively-pond-04a6d3e00.7.azurestaticapps.net" target="_blank" rel="noopener">lively-pond-04a6d3e00.7.azurestaticapps.net</a></li>
+        <li><strong>Installer:</strong> <span class="kbd">AzurePricingTool-Setup.exe</span> (~10 MB, Windows)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <div class="footer-meta">Verify links open raw Azure Retail Prices API results for the selected meter ID in the chosen billing currency.</div>
+  <nav class="footer-links" aria-label="Site information">
+    <a href="#about" data-vpane="about">About</a>
+    <span class="dot">&middot;</span>
+    <a href="#howto" data-vpane="howto">How to Use</a>
+    <span class="dot">&middot;</span>
+    <a href="#built" data-vpane="built">How It's Built</a>
+  </nav>
+</div>
 
 </div>
 
@@ -525,8 +769,43 @@ document.querySelectorAll('.tab').forEach(t => {
     document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
     t.classList.add('active');
     $('pane' + t.dataset.pane.charAt(0).toUpperCase() + t.dataset.pane.slice(1)).classList.add('active');
+    document.body.classList.remove('virtual-page-active');
   });
 });
+
+// Virtual pages (About / How to Use / How It's Built) — opened from footer links
+const VIRTUAL_PAGE_LABELS = { about: 'About', howto: 'How to Use', built: 'How It\'s Built' };
+function showVirtualPage(name){
+  if (!VIRTUAL_PAGE_LABELS[name]) return;
+  document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
+  const pane = $('pane' + name.charAt(0).toUpperCase() + name.slice(1));
+  if (!pane) return;
+  pane.classList.add('active');
+  document.body.classList.add('virtual-page-active');
+  $('virtualPageCrumb').textContent = VIRTUAL_PAGE_LABELS[name];
+  window.scrollTo({top:0, behavior:'instant'});
+}
+function exitVirtualPage(){
+  document.body.classList.remove('virtual-page-active');
+  document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
+  const activeTab = document.querySelector('.tab.active') || document.querySelector('.tab');
+  if (activeTab){
+    activeTab.classList.add('active');
+    const target = $('pane' + activeTab.dataset.pane.charAt(0).toUpperCase() + activeTab.dataset.pane.slice(1));
+    if (target) target.classList.add('active');
+  }
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+}
+document.querySelectorAll('.footer-links a[data-vpane]').forEach(a => {
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    showVirtualPage(a.dataset.vpane);
+    history.replaceState(null, '', '#' + a.dataset.vpane);
+  });
+});
+$('virtualPageBack')?.addEventListener('click', exitVirtualPage);
+// Open via URL hash, e.g. #about
+(function(){ const h = (location.hash||'').replace(/^#/, ''); if (VIRTUAL_PAGE_LABELS[h]) showVirtualPage(h); })();
 
 // ============================================
 // API CALLS (Azure Retail Prices via proxy)
@@ -1658,20 +1937,12 @@ renderRows('searchTbl', []);
 renderRows('bulkTbl', []);
 renderRows('usageTbl', []);
 
-// Disclaimer collapse toggle (persist user choice)
-(function(){
+// Disclaimer is permanent — no Hide/Show toggle. Clear any prior collapsed state.
+document.addEventListener('DOMContentLoaded', () => {
   const bar = document.getElementById('disclaimerBar');
-  const btn = document.getElementById('disclaimerToggle');
-  if (!bar || !btn) return;
-  const collapsed = localStorage.getItem('disclaimerCollapsed') === '1';
-  if (collapsed){ bar.classList.add('collapsed'); btn.textContent = 'Show'; }
-  btn.addEventListener('click', () => {
-    bar.classList.toggle('collapsed');
-    const isCollapsed = bar.classList.contains('collapsed');
-    btn.textContent = isCollapsed ? 'Show' : 'Hide';
-    localStorage.setItem('disclaimerCollapsed', isCollapsed ? '1' : '0');
-  });
-})();
+  if (bar) bar.classList.remove('collapsed');
+  try { localStorage.removeItem('disclaimerCollapsed'); } catch(e){}
+});
 </script>
 
 <div id="disclaimerBar" class="disclaimer-bar" role="region" aria-label="Legal disclaimer">
@@ -1680,9 +1951,7 @@ renderRows('usageTbl', []);
     <div class="text">
       <strong>DISCLAIMER:</strong> This tool produces non-authoritative pricing estimates only. It is independently developed and is <strong>not endorsed, supported, or maintained by Microsoft</strong>. All output is provided "AS IS", without warranty of any kind, express or implied, including merchantability, fitness for a particular purpose, accuracy, or non-infringement. Pricing data is sourced from the public Azure Retail Prices API and may be incomplete, outdated, or misaligned with your specific Enterprise Agreement, Microsoft Customer Agreement, or commercial discount structure. <strong>You are solely responsible for verifying all figures against your official Microsoft pricing documents and Azure invoices before acting on them.</strong> In no event shall the authors, contributors, or distributors be liable for any direct, indirect, incidental, consequential, or punitive damages arising from use of, or inability to use, this tool.
     </div>
-    <button id="disclaimerToggle" class="toggle" type="button" aria-label="Collapse disclaimer">Hide</button>
   </div>
 </div>
-
 </body>
 </html>
