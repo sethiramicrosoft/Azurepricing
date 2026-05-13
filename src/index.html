@@ -112,6 +112,10 @@ thead th{position:sticky;top:0;background:var(--thead-bg);color:var(--text);text
 tbody td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:13px}
 tbody tr:hover{background:var(--row-hover)}
 .mono{font-family:var(--font-mono);font-size:12px}
+.tier-stack{display:flex;flex-direction:column;gap:2px;font-family:var(--font-mono);font-size:11px;line-height:1.3}
+.tier-stack .tier-line{display:flex;justify-content:space-between;gap:8px;white-space:nowrap}
+.tier-stack .tier-min{color:var(--muted);font-weight:600}
+.tier-stack .tier-price{font-weight:600}
 
 /* Badges — Fluent MessageBar style */
 .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:var(--radius);font-size:12px;font-weight:600;white-space:nowrap;border:1px solid transparent}
@@ -605,6 +609,48 @@ function eaDiscountText(eaUnit, eaPayg){
   return pct.toFixed(2) + '%';
 }
 
+// Render per-tier unit prices for graduated SKUs as a single stacked cell (one table row).
+function tieredUnitCell(tierItems){
+  if (!tierItems || tierItems.length < 2) return null;
+  const acd = getAcdPct();
+  const fmtMin = (m) => {
+    const n = Number(m) || 0;
+    return n >= 1000 ? n.toLocaleString() : String(n);
+  };
+  const lines = tierItems.map(t => {
+    let p = toNum(t.retailPrice);
+    if (isNum(p) && acd > 0) p = applyAcd(p);
+    return `<div class="tier-line"><span class="tier-min">${fmtMin(t.tierMinimumUnits)}+</span> <span class="tier-price mono">${isNum(p) ? money(p) : '-'}</span></div>`;
+  });
+  return `<div class="tier-stack">${lines.join('')}</div>`;
+}
+function tieredUnitText(tierItems){
+  if (!tierItems || tierItems.length < 2) return '';
+  const acd = getAcdPct();
+  return tierItems.map(t => {
+    let p = toNum(t.retailPrice);
+    if (isNum(p) && acd > 0) p = applyAcd(p);
+    return `${t.tierMinimumUnits||0}+:${isNum(p) ? p.toFixed(6) : '-'}`;
+  }).join(' | ');
+}
+
+// Comparable Delta % — prefer totals (apples-to-apples, correct for tiered SKUs);
+// fall back to unit prices for tabs without qty/totals.
+function deltaCellAuto(r){
+  const eaT = toNum(r.eaTotalCost), mcaT = toNum(r.mcaTotalCost);
+  if (isNum(eaT) && isNum(mcaT) && eaT !== 0) return deltaCell(eaT, mcaT);
+  return deltaCell(r.eaUnitPrice, r.mcaUnitPrice);
+}
+function deltaTextAuto(r){
+  const eaT = toNum(r.eaTotalCost), mcaT = toNum(r.mcaTotalCost);
+  const useTotals = isNum(eaT) && isNum(mcaT) && eaT !== 0;
+  const cmp = useTotals ? compareEaVsMca(eaT, mcaT) : compareEaVsMca(r.eaUnitPrice, r.mcaUnitPrice);
+  if (cmp.winner === 'MCA cheaper') return `MCA cheaper by ${Math.abs(cmp.diffPct).toFixed(2)}%`;
+  if (cmp.winner === 'MCA expensive') return `MCA expensive by ${Math.abs(cmp.diffPct).toFixed(2)}%`;
+  if (cmp.winner === 'Equal') return 'Equal';
+  return 'N/A';
+}
+
 // ============================================
 // TIER (Graduated Pricing) detection
 // ============================================
@@ -751,10 +797,10 @@ function rowHtml(r){
     <td>${eaDiscountCell(r.eaUnitPrice, r.eaPaygPrice)}</td>
     <td>${esc(eaUomDisplay)}</td>
     <td class="mono">${isNum(toNum(r.mcaTotalCost)) ? money(toNum(r.mcaTotalCost)) : '-'}</td>
-    <td class="mono">${isNum(toNum(r.mcaUnitPrice)) ? money(toNum(r.mcaUnitPrice)) : '-'}</td>
+    <td class="mono">${(r.tierItems && r.tierItems.length > 1) ? tieredUnitCell(r.tierItems) : (isNum(toNum(r.mcaUnitPrice)) ? money(toNum(r.mcaUnitPrice)) : '-')}</td>
     <td>${esc(r.mcaUom || '')}</td>
     <td>${gradCell}</td>
-    <td>${deltaCell(r.eaUnitPrice, r.mcaUnitPrice)}</td>
+    <td>${deltaCellAuto(r)}</td>
     <td><div class="actions">
       ${r.meterId ? `<button class="btn" data-copy="${esc(r.meterId)}">Copy ID</button>` : ''}
       ${verifyUrl ? `<a class="btn" href="${esc(verifyUrl)}" target="_blank">Verify API</a>` : '<span class="small">N/A</span>'}
@@ -1121,6 +1167,91 @@ function parseCSVLine(line){
   return out;
 }
 
+// ============================================
+// PricingModel-aware helpers (RI / SP / Spot / OnDemand)
+// ============================================
+function normPricingModel(v){
+  const s = String(v||'').trim().toLowerCase().replace(/[\s_-]/g,'');
+  if (!s) return 'OnDemand';
+  if (s.includes('reservation') || s === 'ri') return 'Reservation';
+  if (s.includes('savings')) return 'SavingsPlan';
+  if (s.includes('spot')) return 'Spot';
+  if (s.includes('ondemand') || s === 'payg' || s === 'consumption' || s.includes('devtest')) return 'OnDemand';
+  return v.charAt(0).toUpperCase() + v.slice(1);
+}
+function normChargeType(v){
+  const s = String(v||'').trim().toLowerCase();
+  if (s.includes('purchase')) return 'Purchase';
+  if (s.includes('refund')) return 'Refund';
+  return 'Usage';
+}
+function normTerm(v){
+  const s = String(v||'').trim().toLowerCase().replace(/[\s_-]/g,'');
+  if (!s) return '';
+  if (s.includes('3') || s.includes('three')) return '3 Years';
+  if (s.includes('1') || s.includes('one')) return '1 Year';
+  if (s.includes('month')) return '1 Month';
+  return v;
+}
+// Frequency normalization: OneTime (upfront, single payment) vs Recurring (monthly billing).
+// Empty string means unknown — caller should auto-detect.
+function normFrequency(v){
+  const s = String(v||'').trim().toLowerCase().replace(/[\s_-]/g,'');
+  if (!s) return '';
+  if (s.includes('onetime') || s === 'upfront' || s === 'single' || s === 'p0d') return 'OneTime';
+  if (s.includes('recurring') || s.includes('monthly') || s === 'p1m' || s === 'month') return 'Recurring';
+  return '';
+}
+function termMonths(term){
+  if (term === '1 Year') return 12;
+  if (term === '3 Years') return 36;
+  if (term === '1 Month') return 1;
+  return null;
+}
+function termHours(term){
+  if (term === '1 Year') return 8760;
+  if (term === '3 Years') return 26280;
+  if (term === '1 Month') return 730;
+  return null;
+}
+function termShort(term){
+  if (term === '1 Year') return '1Y';
+  if (term === '3 Years') return '3Y';
+  if (term === '1 Month') return '1M';
+  return '';
+}
+function isSpotItem(x){
+  return /spot/i.test(x.skuName||'') || /spot/i.test(x.meterName||'') || /spot/i.test(x.productName||'');
+}
+function selectMcaItem(pool, group){
+  if (!pool || !pool.length) return null;
+  const pm = group.pricingModel || 'OnDemand';
+  if (pm === 'Reservation'){
+    let p = pool.filter(x => x.type === 'Reservation');
+    if (!p.length) p = pool;
+    if (group.term){
+      const f = p.filter(x => (x.reservationTerm||'').toLowerCase() === group.term.toLowerCase());
+      if (f.length) p = f;
+    }
+    return p.find(x => !x.tierMinimumUnits) || p[0] || null;
+  }
+  if (pm === 'Spot'){
+    let p = pool.filter(x => (x.type === 'Consumption' || !x.type) && isSpotItem(x));
+    if (!p.length) p = pool.filter(x => x.type === 'Consumption' || !x.type);
+    return p.find(x => !x.tierMinimumUnits) || p[0] || null;
+  }
+  // OnDemand or SavingsPlan: prefer non-spot Consumption
+  let p = pool.filter(x => (x.type === 'Consumption' || !x.type) && !isSpotItem(x));
+  if (!p.length) p = pool.filter(x => x.type === 'Consumption' || !x.type);
+  return p.find(x => !x.tierMinimumUnits) || p[0] || null;
+}
+function selectSavingsPlanRate(apiItem, term){
+  if (!apiItem || !Array.isArray(apiItem.savingsPlan) || !apiItem.savingsPlan.length) return null;
+  const t = String(term||'').toLowerCase();
+  const m = t ? apiItem.savingsPlan.find(sp => String(sp.term||'').toLowerCase() === t) : apiItem.savingsPlan[0];
+  return m ? toNum(m.retailPrice) : null;
+}
+
 function normalizeUsageRow(r){
   const qty = toNum(pickField(r, ['Quantity','Qty','UsageQuantity','quantity','BillableQuantity']));
   const eaTotalCost = toNum(pickField(r, ['Cost','PreTaxCost','Total Cost','TotalCost','EA Total Cost','cost','CostInBillingCurrency']));
@@ -1129,6 +1260,11 @@ function normalizeUsageRow(r){
     eaUnitPrice = eaTotalCost / qty;
   }
   const eaPaygPrice = toNum(pickField(r, ['PayGPrice','PaygPrice','PayGoPrice','PAYGPrice','RetailPrice','MarketPrice','PayAsYouGoPrice','payGPrice']));
+  const pricingModel = normPricingModel(pickField(r, ['PricingModel','Pricing Model','pricingModel']));
+  const chargeType = normChargeType(pickField(r, ['ChargeType','Charge Type','chargeType']));
+  const term = normTerm(pickField(r, ['Term','TermKey','ReservationTerm','SavingsPlanTerm','term']));
+  const frequency = normFrequency(pickField(r, ['Frequency','BillingFrequency','PaymentFrequency','frequency']));
+  const reservationOrderId = pickField(r, ['ReservationOrderId','ReservationId','reservationOrderId','reservationId']);
   return {
     inputProduct: pickField(r, ['Item Name','ItemName','Product','ProductName','MeterCategory','Service','itemName']),
     inputPartNumber: pickField(r, ['Part Number','PartNumber','SKU','SkuId','partNumber','SKUID']),
@@ -1137,7 +1273,13 @@ function normalizeUsageRow(r){
     skuName: pickField(r, ['SkuName','SKU Name','skuName']),
     location: pickField(r, ['Location','MeterRegion','ResourceLocation','location','MeterLocation']),
     armRegionName: pickField(r, ['armRegionName','ResourceLocationNormalized','ResourceLocation','MeterRegion']),
-    type: pickField(r, ['Type','PriceType','priceType','ChargeType']) || 'Consumption',
+    armSkuName: pickField(r, ['armSkuName','ArmSkuName','arm_sku_name']),
+    type: pickField(r, ['Type','PriceType','priceType']) || '',
+    pricingModel,
+    chargeType,
+    term,
+    frequency,
+    reservationOrderId,
     qty,
     eaTotalCost,
     eaUnitPrice,
@@ -1148,20 +1290,37 @@ function normalizeUsageRow(r){
 }
 
 function ingestIntoGroups(groups, item){
-  const key = item.meterId || `${item.inputProduct}|${item.skuName}|${item.location}`;
+  // Suppress $0 RI/SP-covered consumption rows (Actual files) — nothing to compare.
+  // Note: UnitPrice may carry the on-demand reference rate even when Cost=0, so we
+  // suppress on Cost=0 alone (NOT also requiring UnitPrice=0).
+  if ((item.pricingModel === 'Reservation' || item.pricingModel === 'SavingsPlan')
+      && item.chargeType === 'Usage'){
+    const c = toNum(item.eaTotalCost);
+    if (c === 0 || c === null) return;
+  }
+  const baseKey = item.meterId || `${item.inputProduct}|${item.skuName}|${item.location}`;
+  // Include frequency in the key so OneTime (upfront) and Recurring (monthly) RI Purchase rows
+  // for the same meter don't get merged together.
+  const key = `${baseKey}|${item.pricingModel||'OnDemand'}|${item.term||''}|${item.chargeType||'Usage'}|${item.frequency||''}`;
   if (!groups.has(key)){
-    groups.set(key, {...item, qty: item.qty || 0, eaTotalCost: item.eaTotalCost || 0});
+    groups.set(key, {...item, qty: item.qty || 0, eaTotalCost: item.eaTotalCost || 0,
+      _purchaseRowCount: item.chargeType === 'Purchase' ? 1 : 0,
+      _orderIds: item.reservationOrderId ? new Set([item.reservationOrderId]) : new Set()});
   } else {
     const g = groups.get(key);
     g.qty = (g.qty || 0) + (item.qty || 0);
     g.eaTotalCost = (g.eaTotalCost || 0) + (item.eaTotalCost || 0);
+    if (item.chargeType === 'Purchase') g._purchaseRowCount = (g._purchaseRowCount||0) + 1;
+    if (item.reservationOrderId) g._orderIds.add(item.reservationOrderId);
     if (!g.eaUnitPrice && isNum(item.eaUnitPrice)) g.eaUnitPrice = item.eaUnitPrice;
     if (!isNum(g.eaPaygPrice) && isNum(item.eaPaygPrice)) g.eaPaygPrice = item.eaPaygPrice;
+    if (!g.frequency && item.frequency) g.frequency = item.frequency;
     if (!g.eaUom && item.eaUom) g.eaUom = item.eaUom;
     if (!g.meterName && item.meterName) g.meterName = item.meterName;
     if (!g.skuName && item.skuName) g.skuName = item.skuName;
     if (!g.location && item.location) g.location = item.location;
     if (!g.armRegionName && item.armRegionName) g.armRegionName = item.armRegionName;
+    if (!g.armSkuName && item.armSkuName) g.armSkuName = item.armSkuName;
     if (!g.inputPartNumber && item.inputPartNumber) g.inputPartNumber = item.inputPartNumber;
   }
 }
@@ -1229,18 +1388,22 @@ async function runUsage(){
     idx++;
     if (idx % 10 === 0) $('usageStatus').textContent = `Looking up ${idx}/${groups.size}...`;
     let apiItem = null, tierItems = null;
+    let pool = [];
     try{
       let api = null;
       if (g.meterId){
         api = await apiFetch(`meterId eq '${g.meterId.replace(/'/g,"''")}'`);
       }
+      if (!api?.Items?.length && g.armSkuName){
+        api = await apiFetch(`armSkuName eq '${String(g.armSkuName).replace(/'/g,"''")}'`);
+      }
       if (!api?.Items?.length && g.inputProduct){
         api = await apiFetch(`contains(productName, '${String(g.inputProduct).replace(/'/g,"''")}')`);
       }
-      const list = (api?.Items || []).filter(x => x.type === 'Consumption' || !x.type);
+      const list = api?.Items || [];
       if (list.length){
-        // Prefer per-row location from the usage file; fall back to global region filter
-        let pool = list;
+        // Region/location filter (existing logic)
+        pool = list;
         const rowLoc = (g.location || '').toLowerCase().trim();
         const rowArm = (g.armRegionName || '').toLowerCase().trim();
         if (rowArm){
@@ -1258,27 +1421,121 @@ async function runUsage(){
           const f = list.filter(x => (x.armRegionName||'').toLowerCase().includes(rl) || (x.location||'').toLowerCase().includes(rl));
           if (f.length) pool = f;
         }
-        apiItem = pool.find(x => !x.tierMinimumUnits) || pool[0];
-        tierItems = buildTierItems(pool, apiItem);
       }
     }catch(e){ /* skip */ }
 
     const billingCcy = getBillingCurrency();
-    let mcaUnitPrice = apiItem?.retailPrice ?? null;
-    let mcaTotalCost = (isNum(mcaUnitPrice) && isNum(g.qty)) ? mcaUnitPrice * g.qty : null;
-    // Graduated pricing: compute total across tiers based on actual quantity.
-    if (tierItems && tierItems.length > 1 && isNum(g.qty) && g.qty > 0){
-      const grad = computeGraduatedCost(tierItems, g.qty);
-      if (grad !== null){
-        mcaTotalCost = grad;
-        mcaUnitPrice = grad / g.qty; // effective unit price
+    let mcaUnitPrice = null;
+    let mcaTotalCost = null;
+    let mcaUom = '';
+    const pm = g.pricingModel || 'OnDemand';
+
+    if (pm === 'Reservation'){
+      apiItem = selectMcaItem(pool, g);
+      if (apiItem){
+        const upfront = toNum(apiItem.retailPrice);
+        const hrs = termHours(g.term) || termHours(apiItem.reservationTerm);
+        const months = termMonths(g.term) || termMonths(apiItem.reservationTerm);
+        if (g.chargeType === 'Purchase'){
+          // Detect billing frequency:
+          //   1. Use Frequency column if present (OneTime / Recurring)
+          //   2. Auto-detect: if EA cost-per-RI is roughly upfront/months → Recurring
+          //   3. Default OneTime
+          let freq = g.frequency;
+          if (!freq && isNum(upfront) && months && isNum(g.qty) && g.qty > 0 && isNum(g.eaTotalCost)){
+            const eaPerRi = g.eaTotalCost / g.qty;
+            const monthlyExpected = upfront / months;
+            // If EA cost per RI is closer to monthly than to upfront, treat as Recurring
+            const ratioToMonthly = Math.abs(eaPerRi - monthlyExpected) / monthlyExpected;
+            const ratioToUpfront = Math.abs(eaPerRi - upfront) / upfront;
+            freq = (ratioToMonthly < ratioToUpfront) ? 'Recurring' : 'OneTime';
+            g._frequencyAutoDetected = true;
+          }
+          if (!freq) freq = 'OneTime';
+          g.frequency = freq;
+
+          if (freq === 'Recurring' && months){
+            // EA row represents one month's payment per RI
+            mcaUnitPrice = upfront / months;
+            mcaTotalCost = (isNum(mcaUnitPrice) && isNum(g.qty)) ? mcaUnitPrice * g.qty : null;
+            mcaUom = `1 Month (of ${termShort(g.term)} term)`;
+          } else {
+            // OneTime upfront
+            mcaUnitPrice = upfront;
+            mcaTotalCost = (isNum(upfront) && isNum(g.qty)) ? upfront * g.qty : null;
+            mcaUom = apiItem.unitOfMeasure || '1';
+          }
+        } else {
+          // Amortized Usage: convert upfront → effective per-hour
+          if (isNum(upfront) && hrs){
+            mcaUnitPrice = upfront / hrs;
+            mcaTotalCost = isNum(g.qty) ? mcaUnitPrice * g.qty : null;
+          }
+          mcaUom = '1 Hour';
+        }
+      }
+    } else if (pm === 'SavingsPlan'){
+      apiItem = selectMcaItem(pool, g);
+      if (apiItem){
+        const sp = selectSavingsPlanRate(apiItem, g.term);
+        if (isNum(sp)){
+          if (g.chargeType === 'Purchase' && termHours(g.term)){
+            // Compare commitment $ for full term
+            mcaUnitPrice = sp * termHours(g.term);
+            mcaTotalCost = mcaUnitPrice * (g.qty || 1);
+            mcaUom = `1 Term (${termShort(g.term)})`;
+          } else {
+            mcaUnitPrice = sp;
+            mcaTotalCost = isNum(g.qty) ? sp * g.qty : null;
+            mcaUom = '1 Hour';
+          }
+        }
+      }
+    } else if (pm === 'Spot'){
+      apiItem = selectMcaItem(pool, g);
+      if (apiItem){
+        mcaUnitPrice = toNum(apiItem.retailPrice);
+        mcaTotalCost = (isNum(mcaUnitPrice) && isNum(g.qty)) ? mcaUnitPrice * g.qty : null;
+        mcaUom = apiItem.unitOfMeasure || '';
+      }
+    } else {
+      // OnDemand — graduated tier support
+      const consumptionPool = pool.filter(x => (x.type === 'Consumption' || !x.type) && !isSpotItem(x));
+      apiItem = consumptionPool.find(x => !x.tierMinimumUnits) || consumptionPool[0];
+      tierItems = buildTierItems(consumptionPool, apiItem);
+      if (apiItem){
+        mcaUnitPrice = apiItem.retailPrice ?? null;
+        mcaTotalCost = (isNum(mcaUnitPrice) && isNum(g.qty)) ? mcaUnitPrice * g.qty : null;
+        if (tierItems && tierItems.length > 1 && isNum(g.qty) && g.qty > 0){
+          const grad = computeGraduatedCost(tierItems, g.qty);
+          if (grad !== null){
+            mcaTotalCost = grad;
+            mcaUnitPrice = grad / g.qty;
+          }
+        }
+        mcaUom = apiItem.unitOfMeasure || '';
       }
     }
+
     // Apply Azure Commitment Discount (ACD %) off MCA-E
     if (getAcdPct() > 0){
       if (isNum(mcaUnitPrice)) mcaUnitPrice = applyAcd(mcaUnitPrice);
       if (isNum(mcaTotalCost)) mcaTotalCost = applyAcd(mcaTotalCost);
     }
+
+    // Build a clear Type label, including frequency for RI Purchase rows:
+    //   "OnDemand" / "Reservation 1Y" / "Reservation 3Y (Purchase · Monthly)" / "SavingsPlan 3Y" / "Spot"
+    const tShort = termShort(g.term);
+    let purchaseSuffix = '';
+    if (g.chargeType === 'Purchase'){
+      if (pm === 'Reservation' && g.frequency){
+        const fLabel = g.frequency === 'Recurring' ? 'Monthly' : 'Upfront';
+        purchaseSuffix = ` (Purchase · ${fLabel}${g._frequencyAutoDetected ? '*' : ''})`;
+      } else {
+        purchaseSuffix = ' (Purchase)';
+      }
+    }
+    const typeLabel = pm + (tShort ? ' ' + tShort : '') + purchaseSuffix;
 
     rows.push({
       inputProduct: g.inputProduct,
@@ -1288,7 +1545,10 @@ async function runUsage(){
       meterName: apiItem?.meterName || g.meterName || '',
       meterId: apiItem?.meterId || g.meterId || '',
       location: apiItem?.location || g.location || '',
-      type: apiItem?.type || g.type || 'Consumption',
+      type: typeLabel,
+      pricingModel: pm,
+      term: g.term,
+      chargeType: g.chargeType,
       pricingCurrency: g.pricingCurrency || apiItem?.currencyCode || '',
       billingCurrency: billingCcy,
       qty: g.qty,
@@ -1298,7 +1558,7 @@ async function runUsage(){
       eaUom: g.eaUom,
       mcaTotalCost,
       mcaUnitPrice,
-      mcaUom: apiItem?.unitOfMeasure || '',
+      mcaUom,
       tierItems,
     });
   }
@@ -1306,10 +1566,18 @@ async function runUsage(){
   lastUsageResults = rows;
   renderRows('usageTbl', rows);
 
-  // Summary
-  const matched = rows.filter(r => isNum(r.mcaUnitPrice)).length;
-  const cheaper = rows.filter(r => compareEaVsMca(r.eaUnitPrice, r.mcaUnitPrice).winner === 'MCA cheaper').length;
-  const expensive = rows.filter(r => compareEaVsMca(r.eaUnitPrice, r.mcaUnitPrice).winner === 'MCA expensive').length;
+  // Summary — use totals (apples-to-apples; correct for tiered SKUs)
+  const matched = rows.filter(r => isNum(r.mcaTotalCost)).length;
+  const cheaper = rows.filter(r => {
+    const eaT = toNum(r.eaTotalCost), mcaT = toNum(r.mcaTotalCost);
+    if (!isNum(eaT) || !isNum(mcaT)) return false;
+    return compareEaVsMca(eaT, mcaT).winner === 'MCA cheaper';
+  }).length;
+  const expensive = rows.filter(r => {
+    const eaT = toNum(r.eaTotalCost), mcaT = toNum(r.mcaTotalCost);
+    if (!isNum(eaT) || !isNum(mcaT)) return false;
+    return compareEaVsMca(eaT, mcaT).winner === 'MCA expensive';
+  }).length;
   $('usageSummary').style.display = 'grid';
   $('usageSummary').innerHTML = `
     <div class="card"><div class="label">Source Rows</div><div class="value">${totalRows.toLocaleString()}</div><div class="hint">Raw usage records</div></div>
@@ -1326,17 +1594,15 @@ function toCsv(rows){
   const headers = COLUMNS;
   const out = [headers.join(',')];
   rows.forEach(r => {
-    const cmp = compareEaVsMca(r.eaUnitPrice, r.mcaUnitPrice);
-    const deltaTxt = cmp.winner === 'MCA cheaper' ? `MCA cheaper by ${Math.abs(cmp.diffPct).toFixed(2)}%`
-      : cmp.winner === 'MCA expensive' ? `MCA expensive by ${Math.abs(cmp.diffPct).toFixed(2)}%`
-      : (cmp.winner === 'Equal' ? 'Equal' : 'N/A');
+    const isTiered = r.tierItems && r.tierItems.length > 1;
+    const mcaUnitOut = isTiered ? tieredUnitText(r.tierItems) : (isNum(toNum(r.mcaUnitPrice)) ? r.mcaUnitPrice : '');
     const cells = [
       r.inputProduct, r.inputPartNumber, r.productName, r.skuName, r.meterName,
       r.meterId, r.location, r.type, r.pricingCurrency, r.billingCurrency || getBillingCurrency(),
       r.qty, r.eaTotalCost, r.eaUnitPrice, r.eaPaygPrice, eaDiscountText(r.eaUnitPrice, r.eaPaygPrice), r.eaUom, r.mcaTotalCost,
-      r.mcaUnitPrice, r.mcaUom,
-      (r.tierItems && r.tierItems.length > 1) ? 'Yes' : 'No',
-      deltaTxt,
+      mcaUnitOut, r.mcaUom,
+      isTiered ? 'Yes' : 'No',
+      deltaTextAuto(r),
       r.meterId || ''
     ];
     out.push(cells.map(c => {
