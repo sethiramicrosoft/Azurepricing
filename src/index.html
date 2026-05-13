@@ -452,7 +452,7 @@ const ALL_CURRENCIES = ['USD','AUD','BRL','GBP','CAD','CNY','DKK','EUR','INR','J
 const COLUMNS = [
   'Input Product','Input Part #','Product Name','SKU Name','Meter Name',
   'Meter ID','Location','Type','Pricing Ccy','Billing Ccy',
-  'Total Qty','EA Total Cost','EA Unit Price','EA UOM','MCA-E Total Cost',
+  'Total Qty','EA Total Cost','EA Unit Price','EA PayG Price','EA Discount %','EA UOM','MCA-E Total Cost',
   'MCA-E Unit Price','MCA-E UOM','Graduated Pricing','Comparable Delta %','Actions'
 ];
 
@@ -583,6 +583,26 @@ function deltaCell(eaPrice, mcaPrice){
   if (winner === 'MCA cheaper') return `<span class="badge good">MCA cheaper by ${Math.abs(diffPct).toFixed(2)}%</span>`;
   if (winner === 'MCA expensive') return `<span class="badge bad">MCA expensive by ${Math.abs(diffPct).toFixed(2)}%</span>`;
   return `<span class="badge neutral">Equal</span>`;
+}
+
+// EA Discount % = how much cheaper the actual EA UnitPrice is vs the EA PayGPrice
+// (PayG - Unit) / PayG * 100 ; positive = discount, negative = premium
+function eaDiscountPct(eaUnit, eaPayg){
+  const u = toNum(eaUnit), p = toNum(eaPayg);
+  if (!isNum(u) || !isNum(p) || p === 0) return null;
+  return ((p - u) / p) * 100;
+}
+function eaDiscountCell(eaUnit, eaPayg){
+  const pct = eaDiscountPct(eaUnit, eaPayg);
+  if (!isNum(pct)) return `<span class="badge neutral">N/A</span>`;
+  if (Math.abs(pct) < 0.005) return `<span class="badge neutral">0.00%</span>`;
+  if (pct > 0) return `<span class="badge good">${pct.toFixed(2)}% off</span>`;
+  return `<span class="badge bad">${Math.abs(pct).toFixed(2)}% premium</span>`;
+}
+function eaDiscountText(eaUnit, eaPayg){
+  const pct = eaDiscountPct(eaUnit, eaPayg);
+  if (!isNum(pct)) return '';
+  return pct.toFixed(2) + '%';
 }
 
 // ============================================
@@ -727,6 +747,8 @@ function rowHtml(r){
     <td class="mono">${isNum(toNum(r.qty)) ? money(toNum(r.qty)) : (r.qty || '-')}</td>
     <td class="mono">${isNum(toNum(r.eaTotalCost)) ? money(toNum(r.eaTotalCost)) : '-'}</td>
     <td class="mono">${isNum(toNum(r.eaUnitPrice)) ? money(toNum(r.eaUnitPrice)) : '-'}</td>
+    <td class="mono">${isNum(toNum(r.eaPaygPrice)) ? money(toNum(r.eaPaygPrice)) : '-'}</td>
+    <td>${eaDiscountCell(r.eaUnitPrice, r.eaPaygPrice)}</td>
     <td>${esc(eaUomDisplay)}</td>
     <td class="mono">${isNum(toNum(r.mcaTotalCost)) ? money(toNum(r.mcaTotalCost)) : '-'}</td>
     <td class="mono">${isNum(toNum(r.mcaUnitPrice)) ? money(toNum(r.mcaUnitPrice)) : '-'}</td>
@@ -741,7 +763,7 @@ function rowHtml(r){
 }
 
 function renderRows(tableId, rows){
-  $(tableId).querySelector('tbody').innerHTML = rows.map(rowHtml).join('') || `<tr><td colspan="20" class="small" style="text-align:center;padding:24px">No data</td></tr>`;
+  $(tableId).querySelector('tbody').innerHTML = rows.map(rowHtml).join('') || `<tr><td colspan="22" class="small" style="text-align:center;padding:24px">No data</td></tr>`;
 }
 
 // ============================================
@@ -1106,6 +1128,7 @@ function normalizeUsageRow(r){
   if (!isNum(eaUnitPrice) && isNum(eaTotalCost) && isNum(qty) && qty !== 0){
     eaUnitPrice = eaTotalCost / qty;
   }
+  const eaPaygPrice = toNum(pickField(r, ['PayGPrice','PaygPrice','PayGoPrice','PAYGPrice','RetailPrice','MarketPrice','PayAsYouGoPrice','payGPrice']));
   return {
     inputProduct: pickField(r, ['Item Name','ItemName','Product','ProductName','MeterCategory','Service','itemName']),
     inputPartNumber: pickField(r, ['Part Number','PartNumber','SKU','SkuId','partNumber','SKUID']),
@@ -1118,6 +1141,7 @@ function normalizeUsageRow(r){
     qty,
     eaTotalCost,
     eaUnitPrice,
+    eaPaygPrice,
     eaUom: pickField(r, ['UnitOfMeasure','Unit Of Measure','UOM','EA UOM','unitOfMeasure']),
     pricingCurrency: pickField(r, ['PricingCurrency','Currency','currencyCode','BillingCurrency','BillingCurrencyCode']) || 'USD',
   };
@@ -1132,6 +1156,7 @@ function ingestIntoGroups(groups, item){
     g.qty = (g.qty || 0) + (item.qty || 0);
     g.eaTotalCost = (g.eaTotalCost || 0) + (item.eaTotalCost || 0);
     if (!g.eaUnitPrice && isNum(item.eaUnitPrice)) g.eaUnitPrice = item.eaUnitPrice;
+    if (!isNum(g.eaPaygPrice) && isNum(item.eaPaygPrice)) g.eaPaygPrice = item.eaPaygPrice;
     if (!g.eaUom && item.eaUom) g.eaUom = item.eaUom;
     if (!g.meterName && item.meterName) g.meterName = item.meterName;
     if (!g.skuName && item.skuName) g.skuName = item.skuName;
@@ -1269,6 +1294,7 @@ async function runUsage(){
       qty: g.qty,
       eaTotalCost: g.eaTotalCost,
       eaUnitPrice: g.eaUnitPrice,
+      eaPaygPrice: g.eaPaygPrice,
       eaUom: g.eaUom,
       mcaTotalCost,
       mcaUnitPrice,
@@ -1307,7 +1333,7 @@ function toCsv(rows){
     const cells = [
       r.inputProduct, r.inputPartNumber, r.productName, r.skuName, r.meterName,
       r.meterId, r.location, r.type, r.pricingCurrency, r.billingCurrency || getBillingCurrency(),
-      r.qty, r.eaTotalCost, r.eaUnitPrice, r.eaUom, r.mcaTotalCost,
+      r.qty, r.eaTotalCost, r.eaUnitPrice, r.eaPaygPrice, eaDiscountText(r.eaUnitPrice, r.eaPaygPrice), r.eaUom, r.mcaTotalCost,
       r.mcaUnitPrice, r.mcaUom,
       (r.tierItems && r.tierItems.length > 1) ? 'Yes' : 'No',
       deltaTxt,
