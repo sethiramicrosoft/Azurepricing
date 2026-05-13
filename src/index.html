@@ -493,14 +493,20 @@ html[data-theme='dark'] .disclaimer-bar .toggle:hover{background:rgba(255,255,25
     <p>Country selection auto-derives Pricing and Billing currencies (using Microsoft's MCA FAQ table verbatim). The Retail API is queried in the chosen pricing currency; no FX maths in the app.</p>
 
     <h3>Sticky legal disclaimer</h3>
-    <p>A non-dismissable (only collapsible) Fluent MessageBar at the bottom of every screen. Required because the tool produces non-authoritative pricing estimates and is not endorsed by Microsoft.</p>
+    <p>A permanent (non-dismissable) Fluent MessageBar at the bottom of every screen. Required because the tool produces non-authoritative pricing estimates and is not endorsed by Microsoft.</p>
 
-    <h2>What I'd do differently next time</h2>
+    <h2>How I actually built this</h2>
+    <p>The whole thing was built iteratively in collaboration with an AI coding assistant. I started with a one-off question &mdash; "can you look up these EA part numbers in the Azure Retail Prices API and tell me the MCA equivalent?" &mdash; and the project grew from there as real edge cases surfaced.</p>
+    <p>The workflow was: describe what I wanted in plain English, get a working draft, run it against real EA usage files, find something wrong, describe the problem, repeat. Each round added one capability or fixed one bug. There was no upfront design document &mdash; the architecture emerged from the conversation.</p>
+    <p>A few specific milestones along the way:</p>
     <ul>
-      <li>Add automated tests for the pricing-model logic &mdash; the RI upfront/monthly bug would have been caught earlier.</li>
-      <li>Surface the input file's column mapping in the UI so users can confirm which columns the parser found.</li>
-      <li>Cache Retail API responses in the browser per session to speed up re-runs.</li>
+      <li><strong>Started as one HTML file</strong> with a hard-coded list of products. Quickly hit the browser CORS wall on the Retail Prices API, so I added a tiny Python launcher to act as a same-origin proxy.</li>
+      <li><strong>Tiered pricing</strong> was the first big surprise &mdash; comparing a blended unit price gave misleading deltas, so the math moved to per-tier rates and total-cost comparison.</li>
+      <li><strong>Pricing model awareness</strong> came after a D4 v3 row showed an EA total that didn't equal qty &times; unit price. Turned out OnDemand and Reservation rows were being merged. The group key now includes PricingModel + Term + ChargeType.</li>
+      <li><strong>Reservation upfront vs monthly</strong> was the most subtle bug &mdash; the Retail API only returns full-upfront RI prices, but customers paying monthly were showing 3,500% deltas. Solved by reading the <span class="kbd">Frequency</span> column (with an auto-detect fallback when it's missing).</li>
+      <li><strong>Packaging</strong> happened late &mdash; once the app was useful enough to share, I wrapped it with PyInstaller and Inno Setup for Windows, then mirrored it to Azure Static Web Apps for a shareable URL.</li>
     </ul>
+    <p>Total elapsed time was a handful of sessions over a couple of weeks. The code base is intentionally small (one HTML file, ~1,500 lines) because every line still has to make sense to one person.</p>
 
     <h2>Repository &amp; deployment</h2>
     <div class="info-card">
