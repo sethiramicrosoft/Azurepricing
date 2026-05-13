@@ -824,6 +824,25 @@ async function apiFetch(filter){
   return res.json();
 }
 
+// Paginated fetch — follows NextPageLink up to maxPages (default 10 = 10,000 items).
+// Returns combined { Items: [...] }. Used by Manual / Bulk / Usage lookups so broad
+// queries (e.g. a VM series across all regions/sizes/types) don't get truncated at 1000.
+async function apiFetchAll(filter, maxPages = 10, onProgress){
+  const ccy = getBillingCurrency();
+  let url = `${PROXY}?currencyCode=${encodeURIComponent(ccy)}&$filter=${encodeURIComponent(filter)}`;
+  const all = [];
+  for (let page = 0; page < maxPages; page++){
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    const j = await res.json();
+    if (j.Items?.length) all.push(...j.Items);
+    if (onProgress) onProgress(all.length, page + 1);
+    if (!j.NextPageLink) break;
+    url = `${PROXY}?next=${encodeURIComponent(j.NextPageLink)}`;
+  }
+  return { Items: all };
+}
+
 async function searchProducts(name, region){
   const clean = String(name||'').trim();
   if (!clean) return [];
@@ -1108,26 +1127,27 @@ async function runSearch(){
   try{
     const split = splitProductString(q);
     const region = split.region || regionInput;
-    // Cascading filters using parsed productName + sku/meter parts
+    // Cascading filters using parsed productName + sku/meter parts.
+    // Do NOT restrict type — we want OnDemand AND Reservation rows back.
     const tryFilters = [];
-    if (split.productName) tryFilters.push(`productName eq '${split.productName.replace(/'/g,"''")}' and type eq 'Consumption'`);
+    if (split.productName) tryFilters.push(`productName eq '${split.productName.replace(/'/g,"''")}'`);
     if (split.middleParts[0]){
-      tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(skuName, '${split.middleParts[0].replace(/'/g,"''")}') and type eq 'Consumption'`);
+      tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(skuName, '${split.middleParts[0].replace(/'/g,"''")}')`);
     }
     if (split.middleParts.length){
       const mp = split.middleParts[split.middleParts.length-1];
-      tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(meterName, '${mp.replace(/'/g,"''")}') and type eq 'Consumption'`);
+      tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(meterName, '${mp.replace(/'/g,"''")}')`);
     }
-    if (split.productName) tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and type eq 'Consumption'`);
+    if (split.productName) tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}')`);
     // Fallback to broad searches on full string
-    tryFilters.push(`contains(meterName, '${q.replace(/'/g,"''")}') and type eq 'Consumption'`);
-    tryFilters.push(`contains(skuName, '${q.replace(/'/g,"''")}') and type eq 'Consumption'`);
+    tryFilters.push(`contains(meterName, '${q.replace(/'/g,"''")}')`);
+    tryFilters.push(`contains(skuName, '${q.replace(/'/g,"''")}')`);
 
     let items = [];
     for (const f of tryFilters){
       try{
-        const j = await apiFetch(f);
-        if (j.Items?.length){ items = j.Items.filter(x => x.type === 'Consumption' || !x.type); if (items.length) break; }
+        const j = await apiFetchAll(f, 10, (n, p) => { $('searchStatus').textContent = `Searching... fetched ${n} items (page ${p})`; });
+        if (j.Items?.length){ items = j.Items; break; }
       }catch(e){}
     }
     if (!items.length){
@@ -1152,21 +1172,33 @@ async function runSearch(){
       if (f.length) items = f;
     }
 
-    // Group by meterId
-    const byMeter = new Map();
-    items.forEach(i => {
-      const k = i.meterId;
-      if (!byMeter.has(k)) byMeter.set(k, []);
-      byMeter.get(k).push(i);
-    });
+    // Group by meterId + pricing-model bucket so PAYG / RI 1Y / RI 3Y / Spot
+    // for the same SKU each get their own row.
+    const bucketKey = (x) => {
+      const t = x.type || 'Consumption';
+      if (t === 'Reservation') return `${x.meterId}|RI|${x.reservationTerm||''}`;
+      return `${x.meterId}|${isSpotItem(x) ? 'Spot' : 'OnDemand'}`;
+    };
+    const buckets = new Map();
+    items.forEach(i => { const k = bucketKey(i); if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(i); });
     const rows = [];
-    for (const [meterId, group] of byMeter){
+    for (const [, group] of buckets){
       const base = group.find(g => !g.tierMinimumUnits) || group[0];
+      const t = base.type || 'Consumption';
+      let typeLabel;
+      if (t === 'Reservation'){
+        const term = (base.reservationTerm || '').toUpperCase().replace(/\s/g,'');
+        typeLabel = `Reservation ${term === '1YEAR' ? '1Y' : term === '3YEARS' ? '3Y' : (term || '')}`.trim();
+      } else if (isSpotItem(base)){
+        typeLabel = 'Spot';
+      } else {
+        typeLabel = 'OnDemand';
+      }
       rows.push({
         inputProduct: q, inputPartNumber: '',
         productName: base.productName, skuName: base.skuName,
         meterName: base.meterName, meterId: base.meterId,
-        location: base.location, type: base.type,
+        location: base.location, type: typeLabel,
         pricingCurrency: base.currencyCode, billingCurrency: getBillingCurrency(),
         qty: '', eaTotalCost: '', eaUnitPrice: '', eaUom: '',
         mcaTotalCost: '', mcaUnitPrice: applyAcd(base.retailPrice), mcaUom: base.unitOfMeasure,
@@ -1245,21 +1277,21 @@ async function runBulk(){
     try{
       const split = splitProductString(product);
       const region = split.region || globalRegion;
-      // Attempt multiple search strategies
-      const candidates = [];
+      // Try multiple search strategies. Do NOT restrict type — we want OnDemand AND Reservation
+      // (and Spot, which lives in Consumption with "Spot" in the SKU/meter name).
       const tryFilters = [];
-      if (split.productName) tryFilters.push(`productName eq '${split.productName.replace(/'/g,"''")}' and type eq 'Consumption'`);
-      if (split.productName) tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and type eq 'Consumption'`);
-      if (split.middleParts[0]) tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(skuName, '${split.middleParts[0].replace(/'/g,"''")}') and type eq 'Consumption'`);
+      if (split.productName) tryFilters.push(`productName eq '${split.productName.replace(/'/g,"''")}'`);
+      if (split.productName) tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}')`);
+      if (split.middleParts[0]) tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(skuName, '${split.middleParts[0].replace(/'/g,"''")}')`);
       if (split.middleParts.length){
         const meterPart = split.middleParts[split.middleParts.length-1];
-        tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(meterName, '${meterPart.replace(/'/g,"''")}') and type eq 'Consumption'`);
+        tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(meterName, '${meterPart.replace(/'/g,"''")}')`);
       }
       let items = [];
       for (const f of tryFilters){
         try{
-          const j = await apiFetch(f);
-          if (j.Items?.length){ items = j.Items.filter(x => x.type === 'Consumption' || !x.type); if (items.length) break; }
+          const j = await apiFetchAll(f, 10, (n, p) => { $('bulkStatus').textContent = `${idx+1}/${parsed.length}: ${product}... fetched ${n} items (page ${p})`; });
+          if (j.Items?.length){ items = j.Items; break; }
         }catch(e){}
       }
       if (!items.length){
@@ -1283,18 +1315,57 @@ async function runBulk(){
         const f = items.filter(x => (x.skuName||'').toLowerCase().includes(sku) || (x.meterName||'').toLowerCase().includes(sku));
         if (f.length) items = f;
       }
-      // Group by meterId
-      const byMeter = new Map();
-      items.forEach(i => { if (!byMeter.has(i.meterId)) byMeter.set(i.meterId, []); byMeter.get(i.meterId).push(i); });
-      let count = 0;
-      for (const [meterId, group] of byMeter){
-        if (count++ >= 5) break;
+      // Group by meterId + pricing-model bucket so OnDemand / Reservation 1Y / Reservation 3Y /
+      // Spot for the same SKU each get their own row.
+      const bucketKey = (x) => {
+        const t = x.type || 'Consumption';
+        if (t === 'Reservation') return `${x.meterId}|RI|${x.reservationTerm||''}`;
+        const isSpot = isSpotItem(x);
+        return `${x.meterId}|${isSpot ? 'Spot' : 'OnDemand'}`;
+      };
+      const buckets = new Map();
+      items.forEach(i => { const k = bucketKey(i); if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(i); });
+      // Classify each bucket by pricing-model class so we can guarantee variety
+      // (don't let OnDemand/Spot fill the cap before any Reservation rows appear).
+      const classOf = (key) => {
+        if (key.includes('|RI|')) return key.includes('1Year') || key.includes('1 Year') ? 'RI1Y' : 'RI3Y';
+        if (key.endsWith('|Spot')) return 'Spot';
+        return 'OnDemand';
+      };
+      const byClass = { OnDemand: [], Spot: [], RI1Y: [], RI3Y: [] };
+      for (const [k, g] of buckets){ const c = classOf(k); (byClass[c] || (byClass[c] = [])).push(g); }
+      // Round-robin across classes so all pricing models are represented.
+      const PER_INPUT_CAP = 20;
+      const order = ['OnDemand','RI1Y','RI3Y','Spot'];
+      const picked = [];
+      while (picked.length < PER_INPUT_CAP){
+        let added = false;
+        for (const cls of order){
+          if (byClass[cls] && byClass[cls].length){
+            picked.push(byClass[cls].shift());
+            added = true;
+            if (picked.length >= PER_INPUT_CAP) break;
+          }
+        }
+        if (!added) break;
+      }
+      for (const group of picked){
         const base = group.find(g => !g.tierMinimumUnits) || group[0];
+        const t = base.type || 'Consumption';
+        let typeLabel;
+        if (t === 'Reservation'){
+          const term = (base.reservationTerm || '').toUpperCase().replace(/\s/g,'');
+          typeLabel = `Reservation ${term === '1YEAR' ? '1Y' : term === '3YEARS' ? '3Y' : (term || '')}`.trim();
+        } else if (isSpotItem(base)){
+          typeLabel = 'Spot';
+        } else {
+          typeLabel = 'OnDemand';
+        }
         rows.push({
           inputProduct: product, inputPartNumber: partNumber,
           productName: base.productName, skuName: base.skuName,
           meterName: base.meterName, meterId: base.meterId,
-          location: base.location, type: base.type,
+          location: base.location, type: typeLabel,
           pricingCurrency: base.currencyCode, billingCurrency: getBillingCurrency(),
           qty: '', eaTotalCost: '', eaUnitPrice: '', eaUom: '',
           mcaTotalCost: '', mcaUnitPrice: applyAcd(base.retailPrice), mcaUom: base.unitOfMeasure,
