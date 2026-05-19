@@ -216,7 +216,10 @@ html[data-theme='dark'] .disclaimer-bar .toggle:hover{background:rgba(255,255,25
 <div class="hero">
   <div>
     <h1>SKU EA vs MCA-E Price Intelligence</h1>
-    <div class="sub">Compare EA enrolment pricing with Azure MCA-E retail prices. Manual search, bulk lookup, and usage file analysis.</div>
+    <div class="sub">Compare EA enrolment pricing with Azure MCA-E retail prices. Bulk lookup and usage file analysis.</div>
+    <div class="sub" style="margin-top:6px;font-size:12px;opacity:.85">
+      <strong>Note:</strong> Comparisons are between your <strong>EA customer (negotiated) unit price</strong> from the usage file and the <strong>MCA-E retail price</strong> from the Azure Retail Prices API &mdash; not EA retail vs MCA-E retail. Use the <strong>ACD %</strong> control to simulate your MCA-E negotiated discount.
+    </div>
   </div>
   <div class="hero-actions">
     <div><label>Billing Country</label><select id="country"></select></div>
@@ -227,8 +230,7 @@ html[data-theme='dark'] .disclaimer-bar .toggle:hover{background:rgba(255,255,25
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-pane="manual">Manual Search</div>
-  <div class="tab" data-pane="bulk">Bulk Lookup</div>
+  <div class="tab active" data-pane="bulk">Bulk Lookup</div>
   <div class="tab" data-pane="usage">Usage File Analysis</div>
 </div>
 
@@ -240,35 +242,8 @@ html[data-theme='dark'] .disclaimer-bar .toggle:hover{background:rgba(255,255,25
   </button>
 </div>
 
-<!-- ============ MANUAL SEARCH ============ -->
-<div class="pane active" id="paneManual">
-  <div class="tools">
-    <div class="tool">
-      <label>Product / SKU / Meter Name</label>
-      <input id="searchInput" placeholder='e.g. "Premium SSD Managed Disks", "Virtual Machines D4 v3", "Log Analytics"'/>
-    </div>
-    <div class="tool">
-      <label>Region (Optional)</label>
-      <input id="searchRegion" placeholder="e.g. australiaeast"/>
-    </div>
-    <div class="tool">
-      <label>Action</label>
-      <div style="display:flex;gap:8px">
-        <button class="btn primary" id="btnSearch">Search</button>
-        <button class="btn" id="btnSearchCsv">Download CSV</button>
-      </div>
-      <div class="status" id="searchStatus">Ready.</div>
-    </div>
-  </div>
-  <div class="card" style="padding:0;overflow:hidden">
-    <div class="scroll">
-      <table id="searchTbl"><thead></thead><tbody></tbody></table>
-    </div>
-  </div>
-</div>
-
 <!-- ============ BULK LOOKUP ============ -->
-<div class="pane" id="paneBulk">
+<div class="pane active" id="paneBulk">
   <div class="tools">
     <div class="tool">
       <label>Product Names (one per line)</label>
@@ -317,6 +292,10 @@ html[data-theme='dark'] .disclaimer-bar .toggle:hover{background:rgba(255,255,25
   </div>
 
   <div class="grid3" id="usageSummary" style="display:none"></div>
+
+  <div class="small" style="margin:6px 2px 8px;opacity:.85">
+    <strong>Tip:</strong> Set <strong>ACD %</strong> in the header to simulate your MCA-E negotiated discount. The table below compares the <strong>EA Customer Unit price</strong> (from the uploaded file) against the <strong>MCA-E retail price</strong> (with ACD applied, if entered).
+  </div>
 
   <div class="card" style="padding:0;overflow:hidden">
     <div class="scroll">
@@ -369,21 +348,17 @@ html[data-theme='dark'] .disclaimer-bar .toggle:hover{background:rgba(255,255,25
 <div class="pane" id="paneHowto">
   <div class="info-page">
     <h1>How to use</h1>
-    <p class="lede">Three modes for three workflows &mdash; from a quick single lookup to a full usage-file analysis.</p>
+    <p class="lede">Two modes for two workflows &mdash; from a list of known SKUs to a full usage-file analysis.</p>
 
     <h2>Pick your mode</h2>
     <div class="info-grid">
-      <div class="info-card">
-        <h3>Manual Search</h3>
-        <p>Best for: quickly checking a single product or SKU. Type a product/SKU name (e.g. <em>"Premium SSD P10"</em>), optional region, hit Search.</p>
-      </div>
       <div class="info-card">
         <h3>Bulk Lookup</h3>
         <p>Best for: pricing a list of known products. Paste up to a few hundred names, one per line. Each is looked up against the Retail API.</p>
       </div>
       <div class="info-card">
         <h3>Usage File Analysis</h3>
-        <p>Best for: full EA-vs-MCA comparison. Upload a CSV/XLSX export of EA usage. EA prices come from the file; MCA-E prices are looked up live.</p>
+        <p>Best for: full EA-customer-price vs MCA-E retail comparison. Upload a CSV/XLSX export of EA usage. EA customer unit prices come from the file; MCA-E retail prices are looked up live.</p>
       </div>
     </div>
 
@@ -703,14 +678,50 @@ const COUNTRY_CURRENCY = [
 ];
 const ALL_CURRENCIES = ['USD','AUD','BRL','GBP','CAD','CNY','DKK','EUR','INR','JPY','KRW','NZD','NOK','RUB','SEK','CHF','TWD'];
 
-const COLUMNS = [
-  'Input Product','Input Part #','Product Name','SKU Name','Meter Name',
-  'Meter ID','Location','Type','Pricing Ccy','Billing Ccy',
-  'Total Qty','EA Total Cost','EA Unit Price','EA PayG Price','EA Discount %','EA UOM','MCA-E Total Cost',
-  'MCA-E Unit Price','MCA-E UOM','Graduated Pricing','Comparable Delta %','Actions'
+const COLUMN_DEFS = {
+  inputProduct: 'Input Product',
+  inputPartNumber: 'Input Part #',
+  productName: 'Product Name',
+  skuName: 'SKU Name',
+  meterName: 'Meter Name',
+  meterId: 'Meter ID',
+  location: 'Location',
+  type: 'Type',
+  pricingCurrency: 'Pricing Ccy',
+  billingCurrency: 'Billing Ccy',
+  qty: 'Total Qty',
+  eaTotalCost: 'EA Total Cost',
+  eaUnitPrice: 'EA Unit Price',
+  eaPaygPrice: 'EA PayG Price',
+  eaDiscount: 'EA Discount %',
+  eaUom: 'EA UOM',
+  mcaTotalCost: 'MCA-E Total Cost',
+  mcaUnitPrice: 'MCA-E Unit Price',
+  mcaUom: 'MCA-E UOM',
+  grad: 'Graduated Pricing',
+  delta: 'Comparable Delta %',
+  actions: 'Actions'
+};
+// Bulk Lookup intentionally omits EA-cost columns (quantity/cost/discount come
+// from a usage file, which Bulk does not have).
+const BULK_COLUMN_KEYS = [
+  'inputProduct','inputPartNumber','productName','skuName','meterName',
+  'meterId','location','type','pricingCurrency','billingCurrency',
+  'mcaTotalCost','mcaUnitPrice','mcaUom','grad','delta','actions'
 ];
+const USAGE_COLUMN_KEYS = [
+  'inputProduct','inputPartNumber','productName','skuName','meterName',
+  'meterId','location','type','pricingCurrency','billingCurrency',
+  'qty','eaTotalCost','eaUnitPrice','eaPaygPrice','eaDiscount','eaUom','mcaTotalCost',
+  'mcaUnitPrice','mcaUom','grad','delta','actions'
+];
+const TABLE_COLUMN_KEYS = { bulkTbl: BULK_COLUMN_KEYS, usageTbl: USAGE_COLUMN_KEYS };
+// Per-table label overrides. Usage view labels EA Unit Price as the customer's
+// negotiated price (since we compare against MCA-E retail).
+const COLUMN_LABEL_OVERRIDES = { usageTbl: { eaUnitPrice: 'EA Customer Unit price' } };
+function colKeysFor(tableId){ return TABLE_COLUMN_KEYS[tableId] || USAGE_COLUMN_KEYS; }
+function colLabel(tableId, key){ return (COLUMN_LABEL_OVERRIDES[tableId] || {})[key] || COLUMN_DEFS[key] || key; }
 
-let lastSearchResults = [];
 let lastBulkResults = [];
 let lastUsageResults = [];
 
@@ -1063,10 +1074,11 @@ window.showTiersFor = function(key){
 // TABLE RENDERING (shared 20-column structure)
 // ============================================
 function renderHeader(tableId){
-  $(tableId).querySelector('thead').innerHTML = '<tr>' + COLUMNS.map(c => `<th>${c}</th>`).join('') + '</tr>';
+  const keys = colKeysFor(tableId);
+  $(tableId).querySelector('thead').innerHTML = '<tr>' + keys.map(k => `<th>${esc(colLabel(tableId, k))}</th>`).join('') + '</tr>';
 }
 
-function rowHtml(r){
+function buildCellMap(r){
   const tierKey = (r.meterId || Math.random().toString(36).slice(2)) + '-' + Math.random().toString(36).slice(2,8);
   if (r.tierItems && r.tierItems.length > 1){
     window.__tierData[tierKey] = {
@@ -1083,134 +1095,44 @@ function rowHtml(r){
     : '';
   // EA UOM falls back to MCA UOM if missing (same meter, same unit)
   const eaUomDisplay = r.eaUom || r.mcaUom || '';
-  return `<tr>
-    <td class="input-product-cell">${esc(r.inputProduct || '')}</td>
-    <td class="mono">${esc(r.inputPartNumber || '')}</td>
-    <td>${esc(r.productName || '')}</td>
-    <td>${esc(r.skuName || '')}</td>
-    <td>${esc(r.meterName || '')}</td>
-    <td class="mono col-meter-id">${esc(r.meterId || '')}</td>
-    <td>${esc(r.location || '')}</td>
-    <td>${esc(r.type || '')}</td>
-    <td>${esc(r.pricingCurrency || '')}</td>
-    <td>${esc(r.billingCurrency || getBillingCurrency())}</td>
-    <td class="mono">${isNum(toNum(r.qty)) ? money(toNum(r.qty)) : (r.qty || '-')}</td>
-    <td class="mono">${isNum(toNum(r.eaTotalCost)) ? money(toNum(r.eaTotalCost)) : '-'}</td>
-    <td class="mono">${isNum(toNum(r.eaUnitPrice)) ? money(toNum(r.eaUnitPrice)) : '-'}</td>
-    <td class="mono">${isNum(toNum(r.eaPaygPrice)) ? money(toNum(r.eaPaygPrice)) : '-'}</td>
-    <td>${eaDiscountCell(r.eaUnitPrice, r.eaPaygPrice)}</td>
-    <td>${esc(eaUomDisplay)}</td>
-    <td class="mono">${isNum(toNum(r.mcaTotalCost)) ? money(toNum(r.mcaTotalCost)) : '-'}</td>
-    <td class="mono">${(r.tierItems && r.tierItems.length > 1) ? tieredUnitCell(r.tierItems) : (isNum(toNum(r.mcaUnitPrice)) ? money(toNum(r.mcaUnitPrice)) : '-')}</td>
-    <td>${esc(r.mcaUom || '')}</td>
-    <td>${gradCell}</td>
-    <td>${deltaCellAuto(r)}</td>
-    <td><div class="actions">
+  return {
+    inputProduct: `<td class="input-product-cell">${esc(r.inputProduct || '')}</td>`,
+    inputPartNumber: `<td class="mono">${esc(r.inputPartNumber || '')}</td>`,
+    productName: `<td>${esc(r.productName || '')}</td>`,
+    skuName: `<td>${esc(r.skuName || '')}</td>`,
+    meterName: `<td>${esc(r.meterName || '')}</td>`,
+    meterId: `<td class="mono col-meter-id">${esc(r.meterId || '')}</td>`,
+    location: `<td>${esc(r.location || '')}</td>`,
+    type: `<td>${esc(r.type || '')}</td>`,
+    pricingCurrency: `<td>${esc(r.pricingCurrency || '')}</td>`,
+    billingCurrency: `<td>${esc(r.billingCurrency || getBillingCurrency())}</td>`,
+    qty: `<td class="mono">${isNum(toNum(r.qty)) ? money(toNum(r.qty)) : (r.qty || '-')}</td>`,
+    eaTotalCost: `<td class="mono">${isNum(toNum(r.eaTotalCost)) ? money(toNum(r.eaTotalCost)) : '-'}</td>`,
+    eaUnitPrice: `<td class="mono">${isNum(toNum(r.eaUnitPrice)) ? money(toNum(r.eaUnitPrice)) : '-'}</td>`,
+    eaPaygPrice: `<td class="mono">${isNum(toNum(r.eaPaygPrice)) ? money(toNum(r.eaPaygPrice)) : '-'}</td>`,
+    eaDiscount: `<td>${eaDiscountCell(r.eaUnitPrice, r.eaPaygPrice)}</td>`,
+    eaUom: `<td>${esc(eaUomDisplay)}</td>`,
+    mcaTotalCost: `<td class="mono">${isNum(toNum(r.mcaTotalCost)) ? money(toNum(r.mcaTotalCost)) : '-'}</td>`,
+    mcaUnitPrice: `<td class="mono">${(r.tierItems && r.tierItems.length > 1) ? tieredUnitCell(r.tierItems) : (isNum(toNum(r.mcaUnitPrice)) ? money(toNum(r.mcaUnitPrice)) : '-')}</td>`,
+    mcaUom: `<td>${esc(r.mcaUom || '')}</td>`,
+    grad: `<td>${gradCell}</td>`,
+    delta: `<td>${deltaCellAuto(r)}</td>`,
+    actions: `<td><div class="actions">
       ${r.meterId ? `<button class="btn" data-copy="${esc(r.meterId)}">Copy ID</button>` : ''}
       ${verifyUrl ? `<a class="btn" href="${esc(verifyUrl)}" target="_blank">Verify API</a>` : '<span class="small">N/A</span>'}
-    </div></td>
-  </tr>`;
+    </div></td>`
+  };
+}
+
+function rowHtml(r, keys){
+  const cells = buildCellMap(r);
+  return '<tr>' + keys.map(k => cells[k] || '<td></td>').join('') + '</tr>';
 }
 
 function renderRows(tableId, rows){
-  $(tableId).querySelector('tbody').innerHTML = rows.map(rowHtml).join('') || `<tr><td colspan="22" class="small" style="text-align:center;padding:24px">No data</td></tr>`;
-}
-
-// ============================================
-// MANUAL SEARCH
-// ============================================
-async function runSearch(){
-  const q = $('searchInput').value.trim();
-  const regionInput = $('searchRegion').value.trim();
-  if (!q){ $('searchStatus').textContent = 'Enter a product name.'; return; }
-  $('searchStatus').textContent = 'Searching...';
-  try{
-    const split = splitProductString(q);
-    const region = split.region || regionInput;
-    // Cascading filters using parsed productName + sku/meter parts.
-    // Do NOT restrict type — we want OnDemand AND Reservation rows back.
-    const tryFilters = [];
-    if (split.productName) tryFilters.push(`productName eq '${split.productName.replace(/'/g,"''")}'`);
-    if (split.middleParts[0]){
-      tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(skuName, '${split.middleParts[0].replace(/'/g,"''")}')`);
-    }
-    if (split.middleParts.length){
-      const mp = split.middleParts[split.middleParts.length-1];
-      tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(meterName, '${mp.replace(/'/g,"''")}')`);
-    }
-    if (split.productName) tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}')`);
-    // Fallback to broad searches on full string
-    tryFilters.push(`contains(meterName, '${q.replace(/'/g,"''")}')`);
-    tryFilters.push(`contains(skuName, '${q.replace(/'/g,"''")}')`);
-
-    let items = [];
-    for (const f of tryFilters){
-      try{
-        const j = await apiFetchAll(f, 10, (n, p) => { $('searchStatus').textContent = `Searching... fetched ${n} items (page ${p})`; });
-        if (j.Items?.length){ items = j.Items; break; }
-      }catch(e){}
-    }
-    if (!items.length){
-      // Last-resort broad search via searchProducts
-      items = await searchProducts(split.productName || q, '');
-    }
-    if (!items.length){ $('searchStatus').textContent = 'No results found.'; lastSearchResults = []; renderRows('searchTbl', []); return; }
-
-    // Region narrowing
-    if (region){
-      const rl = region.toLowerCase();
-      const rlNoSpace = rl.replace(/\s+/g,'');
-      const f = items.filter(x => (x.location||'').toLowerCase() === rl
-        || (x.armRegionName||'').toLowerCase() === rlNoSpace
-        || (x.location||'').toLowerCase().includes(rl)
-        || (x.armRegionName||'').toLowerCase().includes(rlNoSpace));
-      if (f.length) items = f;
-    }
-    if (split.middleParts[0]){
-      const sku = split.middleParts[0].toLowerCase();
-      const f = items.filter(x => (x.skuName||'').toLowerCase().includes(sku) || (x.meterName||'').toLowerCase().includes(sku));
-      if (f.length) items = f;
-    }
-
-    // Group by meterId + pricing-model bucket so PAYG / RI 1Y / RI 3Y / Spot
-    // for the same SKU each get their own row.
-    const bucketKey = (x) => {
-      const t = x.type || 'Consumption';
-      if (t === 'Reservation') return `${x.meterId}|RI|${x.reservationTerm||''}`;
-      return `${x.meterId}|${isSpotItem(x) ? 'Spot' : 'OnDemand'}`;
-    };
-    const buckets = new Map();
-    items.forEach(i => { const k = bucketKey(i); if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(i); });
-    const rows = [];
-    for (const [, group] of buckets){
-      const base = group.find(g => !g.tierMinimumUnits) || group[0];
-      const t = base.type || 'Consumption';
-      let typeLabel;
-      if (t === 'Reservation'){
-        const term = (base.reservationTerm || '').toUpperCase().replace(/\s/g,'');
-        typeLabel = `Reservation ${term === '1YEAR' ? '1Y' : term === '3YEARS' ? '3Y' : (term || '')}`.trim();
-      } else if (isSpotItem(base)){
-        typeLabel = 'Spot';
-      } else {
-        typeLabel = 'OnDemand';
-      }
-      rows.push({
-        inputProduct: q, inputPartNumber: '',
-        productName: base.productName, skuName: base.skuName,
-        meterName: base.meterName, meterId: base.meterId,
-        location: base.location, type: typeLabel,
-        pricingCurrency: base.currencyCode, billingCurrency: getBillingCurrency(),
-        qty: '', eaTotalCost: '', eaUnitPrice: '', eaUom: '',
-        mcaTotalCost: '', mcaUnitPrice: applyAcd(base.retailPrice), mcaUom: base.unitOfMeasure,
-        tierItems: buildTierItems(group, base),
-      });
-    }
-    lastSearchResults = rows;
-    renderRows('searchTbl', rows);
-    $('searchStatus').textContent = `Found ${rows.length} meter(s).`;
-  }catch(e){
-    $('searchStatus').textContent = `Error: ${e.message}`;
-  }
+  const keys = colKeysFor(tableId);
+  $(tableId).querySelector('tbody').innerHTML = rows.map(r => rowHtml(r, keys)).join('')
+    || `<tr><td colspan="${keys.length}" class="small" style="text-align:center;padding:24px">No data</td></tr>`;
 }
 
 // ============================================
@@ -1946,21 +1868,38 @@ async function runUsage(){
 // ============================================
 // CSV EXPORT
 // ============================================
-function toCsv(rows){
-  const headers = COLUMNS;
+function toCsv(rows, tableId){
+  const keys = colKeysFor(tableId || 'usageTbl');
+  const headers = keys.map(k => colLabel(tableId || 'usageTbl', k));
   const out = [headers.join(',')];
   rows.forEach(r => {
     const isTiered = r.tierItems && r.tierItems.length > 1;
     const mcaUnitOut = isTiered ? tieredUnitText(r.tierItems) : (isNum(toNum(r.mcaUnitPrice)) ? r.mcaUnitPrice : '');
-    const cells = [
-      r.inputProduct, r.inputPartNumber, r.productName, r.skuName, r.meterName,
-      r.meterId, r.location, r.type, r.pricingCurrency, r.billingCurrency || getBillingCurrency(),
-      r.qty, r.eaTotalCost, r.eaUnitPrice, r.eaPaygPrice, eaDiscountText(r.eaUnitPrice, r.eaPaygPrice), r.eaUom, r.mcaTotalCost,
-      mcaUnitOut, r.mcaUom,
-      isTiered ? 'Yes' : 'No',
-      deltaTextAuto(r),
-      r.meterId || ''
-    ];
+    const valueByKey = {
+      inputProduct: r.inputProduct,
+      inputPartNumber: r.inputPartNumber,
+      productName: r.productName,
+      skuName: r.skuName,
+      meterName: r.meterName,
+      meterId: r.meterId,
+      location: r.location,
+      type: r.type,
+      pricingCurrency: r.pricingCurrency,
+      billingCurrency: r.billingCurrency || getBillingCurrency(),
+      qty: r.qty,
+      eaTotalCost: r.eaTotalCost,
+      eaUnitPrice: r.eaUnitPrice,
+      eaPaygPrice: r.eaPaygPrice,
+      eaDiscount: eaDiscountText(r.eaUnitPrice, r.eaPaygPrice),
+      eaUom: r.eaUom,
+      mcaTotalCost: r.mcaTotalCost,
+      mcaUnitPrice: mcaUnitOut,
+      mcaUom: r.mcaUom,
+      grad: isTiered ? 'Yes' : 'No',
+      delta: deltaTextAuto(r),
+      actions: r.meterId || ''
+    };
+    const cells = keys.map(k => valueByKey[k]);
     out.push(cells.map(c => {
       const s = String(c ?? '');
       return /[,"\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
@@ -1969,9 +1908,9 @@ function toCsv(rows){
   return out.join('\n');
 }
 
-function downloadCsv(rows, filename){
+function downloadCsv(rows, filename, tableId){
   if (!rows.length){ alert('No data to export.'); return; }
-  const blob = new Blob([toCsv(rows)], {type:'text/csv;charset=utf-8;'});
+  const blob = new Blob([toCsv(rows, tableId)], {type:'text/csv;charset=utf-8;'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = filename;
   a.click(); URL.revokeObjectURL(a.href);
@@ -1995,22 +1934,18 @@ document.addEventListener('click', async (e) => {
 // WIRE UP EVENTS
 // ============================================
 initSelectors();
-['searchTbl','bulkTbl','usageTbl'].forEach(renderHeader);
+['bulkTbl','usageTbl'].forEach(renderHeader);
 
-$('btnSearch').addEventListener('click', runSearch);
-$('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
 $('btnBulk').addEventListener('click', runBulk);
 $('btnUsage').addEventListener('click', runUsage);
 
-$('btnSearchCsv').addEventListener('click', () => downloadCsv(lastSearchResults, 'manual-search.csv'));
-$('btnBulkCsv').addEventListener('click', () => downloadCsv(lastBulkResults, 'bulk-lookup.csv'));
-$('btnUsageCsv').addEventListener('click', () => downloadCsv(lastUsageResults, 'usage-analysis.csv'));
+$('btnBulkCsv').addEventListener('click', () => downloadCsv(lastBulkResults, 'bulk-lookup.csv', 'bulkTbl'));
+$('btnUsageCsv').addEventListener('click', () => downloadCsv(lastUsageResults, 'usage-analysis.csv', 'usageTbl'));
 
 // Click outside modal to close
 $('tierModal').addEventListener('click', (e) => { if (e.target.id === 'tierModal') e.target.classList.remove('show'); });
 
 // Initial empty render
-renderRows('searchTbl', []);
 renderRows('bulkTbl', []);
 renderRows('usageTbl', []);
 
