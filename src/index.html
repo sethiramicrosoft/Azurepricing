@@ -5,76 +5,166 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>SKU EA vs MCA-E Price Intelligence</title>
 <style>
-/* === Azure Fluent theme === */
+/* === CCF Trailblazer brand (light only) === */
 :root{
-  /* Light (default) — Azure Portal aesthetic */
-  --bg:#FAF9F8;
+  --bg:#FAFAFA;               /* Cloud White */
   --panel:#FFFFFF;
-  --panel2:#F3F2F1;
-  --line:#EDEBE9;
-  --line-strong:#D2D0CE;
-  --text:#201F1E;
-  --muted:#605E5C;
-  --accent:#0078D4;          /* Azure blue */
-  --accent-hover:#106EBE;
-  --accent-pressed:#005A9E;
-  --good:#107C10;            /* Fluent green */
-  --bad:#A4262C;             /* Fluent red */
-  --warn:#FFB900;            /* Fluent yellow */
-  --warn-bg:#FFF4CE;
-  --warn-border:#F3CE3D;
-  --shadow:0 1.6px 3.6px rgba(0,0,0,.08), 0 0.3px 0.9px rgba(0,0,0,.06);
-  --shadow-md:0 3.2px 7.2px rgba(0,0,0,.10), 0 0.6px 1.8px rgba(0,0,0,.08);
+  --panel2:#F4F2FA;
+  --line:rgba(11,23,41,0.10);
+  --line-strong:rgba(11,23,41,0.18);
+  --text:#0B1B26;             /* Ink */
+  --muted:#55606D;
+  --accent:#35258F;           /* Trailblazer Purple */
+  --accent-hover:#2A1D70;
+  --accent-pressed:#1F1456;
+  --accent-tint:#F5F3FF;
+  --good:#107C10;             /* Success green */
+  --bad:#E63B2E;              /* Brand red */
+  --warn:#FFB900;
+  --warn-bg:#FFF6D6;
+  --warn-border:#F0C419;
+  --shadow:0 1px 0 rgba(11,23,41,0.04), 0 8px 24px -16px rgba(11,23,41,0.18);
+  --shadow-md:0 2px 6px rgba(11,23,41,0.08), 0 16px 32px -20px rgba(11,23,41,0.22);
   --bg-grad:none;
   --input-bg:#FFFFFF;
-  --thead-bg:#F3F2F1;
+  --thead-bg:#F4F2FA;
   --btn-bg:#FFFFFF;
-  --btn-bg-hover:#F3F2F1;
-  --row-hover:#F8F7F6;
-  --radius:2px;              /* Fluent uses near-square corners */
-  --radius-md:4px;
-  --font:"Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-  --font-mono:Consolas, "Cascadia Mono", "SF Mono", Menlo, monospace;
+  --btn-bg-hover:#F4F2FA;
+  --row-hover:#FAFAFA;
+  --radius:8px;
+  --radius-md:14px;
+  --font:"Segoe UI Variable Text","Segoe UI",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+  --font-mono:Consolas,"Cascadia Mono","SF Mono",Menlo,monospace;
+  --hero-grad:linear-gradient(135deg,#140830 0%,#221260 34%,#2d1f7a 68%,#0b5a5d 100%);
 }
+
+/* CCF Trailblazer dark mode (brand-core §12.2) — brand colors stay, surfaces flip */
 html[data-theme='dark']{
-  /* Azure Portal dark */
-  --bg:#1B1A19;
-  --panel:#252423;
-  --panel2:#2D2C2B;
-  --line:#3B3A39;
-  --line-strong:#605E5C;
-  --text:#F3F2F1;
-  --muted:#A19F9D;
-  --accent:#3AA0F3;          /* lighter Azure blue for dark bg */
-  --accent-hover:#62B5F6;
-  --accent-pressed:#2899F5;
-  --good:#54B054;
-  --bad:#F1707B;
-  --warn:#FFB900;
-  --warn-bg:#433519;
+  --bg:#0F0D1A;
+  --panel:#1E1B2E;
+  --panel2:#252240;
+  --line:rgba(255,255,255,0.08);
+  --line-strong:rgba(255,255,255,0.18);
+  --text:rgba(255,255,255,0.92);
+  --muted:rgba(255,255,255,0.62);
+  --accent:#7B93FF;           /* lighter purple-blue for dark contrast */
+  --accent-hover:#9DAFFF;
+  --accent-pressed:#5A75E8;
+  --accent-tint:rgba(123,147,255,0.14);
+  --good:#3AC972;
+  --bad:#FF6B5C;
+  --warn:#FFD45C;
+  --warn-bg:#3A2E10;
   --warn-border:#8A6116;
-  --shadow:0 1.6px 3.6px rgba(0,0,0,.32), 0 0.3px 0.9px rgba(0,0,0,.28);
-  --shadow-md:0 3.2px 7.2px rgba(0,0,0,.40), 0 0.6px 1.8px rgba(0,0,0,.32);
-  --bg-grad:none;
-  --input-bg:#1B1A19;
-  --thead-bg:#2D2C2B;
-  --btn-bg:#252423;
-  --btn-bg-hover:#3B3A39;
-  --row-hover:#2D2C2B;
+  --shadow:0 2px 12px rgba(0,0,0,0.4);
+  --shadow-md:0 4px 20px rgba(0,0,0,0.5);
+  --input-bg:rgba(0,0,0,0.3);
+  --thead-bg:#252240;
+  --btn-bg:#1E1B2E;
+  --btn-bg-hover:#2A2740;
+  --row-hover:rgba(255,255,255,0.04);
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 var(--font);min-height:100vh}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
-.wrap{max-width:1680px;margin:0 auto;padding:24px;padding-bottom:120px /* room for sticky disclaimer */}
+.wrap{max-width:1680px;margin:0 auto;padding:0 24px 24px}
 
-/* Header */
-.hero{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin-bottom:20px;flex-wrap:wrap;padding-bottom:16px;border-bottom:1px solid var(--line)}
-h1{margin:0;font-size:24px;font-weight:600;letter-spacing:-0.01em}
-.sub{color:var(--muted);margin-top:4px;font-size:13px}
-.hero-actions{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
-.hero-actions > div{display:flex;flex-direction:column;gap:4px}
-.hero-actions label{color:var(--muted);font-size:11px;font-weight:600;text-transform:none;letter-spacing:0}
+/* Hero — full-bleed branded gradient band (header + description only) */
+.hero{
+  position:relative;
+  background:var(--hero-grad);
+  color:#FFFFFF;
+  padding:36px 32px 32px;
+  margin:0 0 24px;
+  box-shadow:var(--shadow);
+}
+.hero-inner{
+  max-width:1680px;
+  margin:0 auto;
+  padding-right:96px; /* reserve space for theme toggle */
+}
+.hero h1{color:#FFFFFF;font-size:clamp(1.5rem,1.2vw + 1rem,2rem);font-weight:600;letter-spacing:-.01em;margin:0}
+.hero .sub{color:rgba(255,255,255,0.88);font-size:14px;margin-top:6px;max-width:60rem}
+.hero .sub strong{color:#FFFFFF;font-weight:600}
+
+/* Pricing controls strip (Country / Currency / ACD %) — below the hero, inside .wrap */
+.controls-bar{
+  display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius-md);
+  padding:14px 18px;
+  margin:0 0 20px;
+  box-shadow:var(--shadow);
+}
+.controls-bar > div{display:flex;flex-direction:column;gap:4px;min-width:0}
+.controls-bar label{color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.controls-bar select, .controls-bar input{
+  background:var(--input-bg);
+  color:var(--text);
+  border:1px solid var(--line-strong);
+  border-radius:var(--radius);
+  padding:7px 10px;
+  font:inherit;
+  font-size:13px;
+}
+.controls-bar select:focus, .controls-bar input:focus{
+  outline:none;
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(53,37,143,0.15);
+}
+
+/* Theme toggle — brand-core §12.1 frosted sun/moon pill */
+.theme-toggle{
+  position:absolute;
+  top:20px;
+  right:24px;
+  display:inline-flex;
+  gap:2px;
+  padding:3px;
+  border-radius:20px;
+  background:rgba(255,255,255,0.10);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,0.18);
+  cursor:pointer;
+}
+.theme-toggle button{
+  width:34px;height:34px;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:transparent;border:none;border-radius:16px;
+  color:rgba(255,255,255,0.60);
+  cursor:pointer;
+  transition:background .15s ease, color .15s ease, transform .08s ease;
+}
+.theme-toggle button svg{width:16px;height:16px}
+.theme-toggle button.active{
+  background:rgba(255,255,255,0.20);
+  color:#FFFFFF;
+  box-shadow:0 2px 8px rgba(0,0,0,0.15);
+}
+.theme-toggle:active button{transform:scale(0.92)}
+@media print{ .theme-toggle{display:none} }
+
+/* Top-of-page disclaimer notice (replaces the old sticky-bottom bar) */
+.notice{
+  display:flex;gap:12px;align-items:flex-start;
+  background:var(--warn-bg);
+  border:1px solid var(--warn-border);
+  border-left:4px solid #B07900;
+  border-radius:var(--radius);
+  padding:12px 16px;
+  margin:0 0 20px;
+  color:#3C2E00;
+  font-size:13px;
+  line-height:1.5;
+}
+html[data-theme='dark'] .notice{color:#FFE3A5;border-left-color:#FFD45C}
+.notice strong{color:#7A2E22;font-weight:700}
+html[data-theme='dark'] .notice strong{color:#FFB4A8}
+.notice-icon{flex:0 0 auto;color:#B07900;display:inline-flex;align-items:center;line-height:1}
+html[data-theme='dark'] .notice-icon{color:#FFD45C}
 
 /* Cards & panels — flat, bordered, no glassmorphism */
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);padding:16px;box-shadow:var(--shadow)}
@@ -190,42 +280,98 @@ body.virtual-page-active .virtual-page-bar{display:flex}
 .tier-row{padding:9px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
 .tier-row:last-child{border-bottom:none}
 
-.input-product-cell{min-width:240px;max-width:380px;white-space:normal;word-break:break-word}
-.col-meter-id{min-width:200px}
+/* === Sticky first column (Input Product) — visible during horizontal scroll === */
+#bulkTbl thead th:first-child,
+#usageTbl thead th:first-child{
+  position:sticky;
+  left:0;
+  z-index:3; /* above other sticky thead cells (z-index:2) */
+  background:var(--thead-bg);
+  box-shadow:1px 0 0 var(--line-strong);
+}
+#bulkTbl tbody td:first-child,
+#usageTbl tbody td:first-child{
+  position:sticky;
+  left:0;
+  z-index:1;
+  background:var(--panel);
+  box-shadow:1px 0 0 var(--line);
+}
+#bulkTbl tbody tr:hover td:first-child,
+#usageTbl tbody tr:hover td:first-child{ background:var(--row-hover); }
+
+/* === Result card pop-out (Expand to full screen) === */
+.result-card{position:relative;display:flex;flex-direction:column}
+.result-card-toolbar{
+  display:flex;justify-content:space-between;align-items:center;gap:8px;
+  padding:8px 12px;
+  border-bottom:1px solid var(--line);
+  background:var(--panel);
+}
+.result-card-toolbar .toolbar-label{
+  font-size:12px;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.06em;
+}
+.btn.icon-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 10px;font-size:12px;font-weight:600;
+  color:var(--accent);
+  background:var(--accent-tint);
+  border:1px solid rgba(53,37,143,0.20);
+}
+.btn.icon-btn:hover{background:#EAE5FF;color:var(--accent-hover);border-color:rgba(53,37,143,0.35)}
+.btn.icon-btn svg{width:14px;height:14px;flex:0 0 auto}
+
+.result-card.is-expanded{
+  position:fixed;
+  inset:16px;
+  z-index:9500;
+  box-shadow:var(--shadow-md);
+}
+.result-card.is-expanded .scroll{max-height:none;flex:1 1 auto;border-radius:0}
+.expanded-backdrop{display:none;position:fixed;inset:0;background:rgba(11,23,41,0.45);z-index:9400}
+body.has-expanded-card{overflow:hidden}
+body.has-expanded-card .expanded-backdrop{display:block}
 .footer{color:var(--muted);font-size:12px;margin-top:24px;text-align:center}
 
-/* === Sticky Disclaimer Banner (Fluent MessageBar - Severe) === */
-.disclaimer-bar{position:fixed;left:0;right:0;bottom:0;background:var(--warn-bg);border-top:2px solid var(--warn-border);padding:10px 24px;z-index:9000;box-shadow:0 -2px 8px rgba(0,0,0,.10);font-size:12px;line-height:1.45;color:#323130}
-html[data-theme='dark'] .disclaimer-bar{color:#F3F2F1}
-.disclaimer-bar .inner{max-width:1680px;margin:0 auto;display:flex;align-items:flex-start;gap:12px}
-.disclaimer-bar .icon{flex:0 0 auto;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;color:#8A6116;font-size:16px;line-height:1}
-html[data-theme='dark'] .disclaimer-bar .icon{color:var(--warn)}
-.disclaimer-bar .text{flex:1 1 auto}
-.disclaimer-bar strong{color:#A4262C;font-weight:700}
-html[data-theme='dark'] .disclaimer-bar strong{color:#F1707B}
-.disclaimer-bar .toggle{flex:0 0 auto;background:transparent;border:1px solid var(--warn-border);color:inherit;font:inherit;padding:2px 10px;border-radius:var(--radius);cursor:pointer;font-weight:600}
-.disclaimer-bar .toggle:hover{background:rgba(255,255,255,.40)}
-html[data-theme='dark'] .disclaimer-bar .toggle:hover{background:rgba(255,255,255,.08)}
-.disclaimer-bar.collapsed .text{display:none}
-.disclaimer-bar.collapsed{padding:6px 24px}
+/* (Legacy sticky-bottom disclaimer CSS removed — disclaimer now lives at top as .notice) */
+
 </style>
 </head>
 <body>
-<div class="wrap">
 
 <div class="hero">
-  <div>
+  <div class="hero-inner">
     <h1>SKU EA vs MCA-E Price Intelligence</h1>
     <div class="sub">Compare EA enrolment pricing with Azure MCA-E retail prices. Bulk lookup and usage file analysis.</div>
     <div class="sub" style="margin-top:6px;font-size:12px;opacity:.85">
       <strong>Note:</strong> Comparisons are between your <strong>EA customer (negotiated) unit price</strong> from the usage file and the <strong>MCA-E retail price</strong> from the Azure Retail Prices API &mdash; not EA retail vs MCA-E retail. Use the <strong>ACD %</strong> control to simulate your MCA-E negotiated discount.
     </div>
   </div>
-  <div class="hero-actions">
-    <div><label>Billing Country</label><select id="country"></select></div>
-    <div><label>Billing Currency</label><select id="billingCcy"></select></div>
-    <div><label>ACD % <span style="opacity:.6;font-size:11px">(off MCA-E)</span></label><input id="acdPct" type="number" min="0" max="100" step="0.01" value="0" style="width:90px"/></div>
-    <div><label>Theme</label><select id="theme"><option value="light">Light</option><option value="dark">Dark</option></select></div>
+  <div class="theme-toggle" id="themeToggle" role="button" tabindex="0" aria-label="Toggle light or dark theme" title="Toggle theme">
+    <button type="button" data-theme-set="light" aria-label="Light mode">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+    <button type="button" data-theme-set="dark" aria-label="Dark mode">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</div>
+
+<div class="wrap">
+
+<div class="controls-bar" aria-label="Pricing controls">
+  <div><label for="country">Billing Country</label><select id="country"></select></div>
+  <div><label for="billingCcy">Billing Currency</label><select id="billingCcy"></select></div>
+  <div><label for="acdPct">ACD % <span style="opacity:.6;font-size:11px;text-transform:none;letter-spacing:0">(off MCA-E)</span></label><input id="acdPct" type="number" min="0" max="100" step="0.01" value="0" style="width:90px"/></div>
+</div>
+
+<div class="notice" role="region" aria-label="Legal disclaimer">
+  <span class="notice-icon" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  </span>
+  <div>
+    <strong>Non-authoritative estimates — not a Microsoft product.</strong> Provided <strong>"AS IS"</strong> without warranty of any kind. Pricing comes from the public Azure Retail Prices API and may differ from your EA, MCA, or negotiated agreements. <strong>You are solely responsible for verifying every figure against your official Microsoft pricing documents and Azure invoices before acting on it.</strong> The authors accept no liability for any loss arising from use of this tool.
   </div>
 </div>
 
@@ -262,7 +408,14 @@ html[data-theme='dark'] .disclaimer-bar .toggle:hover{background:rgba(255,255,25
       <div class="status" id="bulkStatus">Ready.</div>
     </div>
   </div>
-  <div class="card" style="padding:0;overflow:hidden">
+  <div class="card result-card" id="bulkResultCard" style="padding:0;overflow:hidden">
+    <div class="result-card-toolbar">
+      <span class="toolbar-label">Results</span>
+      <button class="btn icon-btn" data-expand="bulkResultCard" aria-label="Expand results table to full screen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        <span data-expand-label>Expand</span>
+      </button>
+    </div>
     <div class="scroll">
       <table id="bulkTbl"><thead></thead><tbody></tbody></table>
     </div>
@@ -297,7 +450,14 @@ html[data-theme='dark'] .disclaimer-bar .toggle:hover{background:rgba(255,255,25
     <strong>Tip:</strong> Set <strong>ACD %</strong> in the header to simulate your MCA-E negotiated discount. The table below compares the <strong>EA Customer Unit price</strong> (from the uploaded file) against the <strong>MCA-E retail price</strong> (with ACD applied, if entered).
   </div>
 
-  <div class="card" style="padding:0;overflow:hidden">
+  <div class="card result-card" id="usageResultCard" style="padding:0;overflow:hidden">
+    <div class="result-card-toolbar">
+      <span class="toolbar-label">Results</span>
+      <button class="btn icon-btn" data-expand="usageResultCard" aria-label="Expand results table to full screen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        <span data-expand-label>Expand</span>
+      </button>
+    </div>
     <div class="scroll">
       <table id="usageTbl"><thead></thead><tbody></tbody></table>
     </div>
@@ -339,7 +499,7 @@ html[data-theme='dark'] .disclaimer-bar .toggle:hover{background:rgba(255,255,25
     <h2>Status</h2>
     <div class="info-card">
       <p><span class="tag">Internal tool</span> &nbsp; <span class="tag muted">Non-authoritative</span></p>
-      <p style="margin-top:10px">This is an independently developed tool. It is <strong>not endorsed, supported, or maintained by Microsoft</strong>. Always verify figures against your official Microsoft pricing documents and Azure invoices before acting on them. See the disclaimer banner at the bottom of every screen for full terms.</p>
+      <p style="margin-top:10px">This is an independently developed tool. It is <strong>not endorsed, supported, or maintained by Microsoft</strong>. Always verify figures against your official Microsoft pricing documents and Azure invoices before acting on them. See the disclaimer notice at the top of every screen for full terms.</p>
     </div>
   </div>
 </div>
@@ -528,7 +688,7 @@ html[data-theme='dark'] .disclaimer-bar .toggle:hover{background:rgba(255,255,25
 // ============================================
 const PROXY = window.location.protocol.startsWith('http')
   ? `${window.location.origin}/api/prices`
-  : 'https://prices.azure.com/api/retail/prices';
+  : '/api/prices';
 
 // Source: https://learn.microsoft.com/en-us/azure/cost-management-billing/microsoft-customer-agreement/microsoft-customer-agreement-faq
 // "Under the Microsoft Customer Agreement, in which currency is my payment processed?"
@@ -768,13 +928,26 @@ function initSelectors(){
     if (opt.dataset.currency) cs.value = opt.dataset.currency;
   });
 
-  $('theme').addEventListener('change', e => {
-    document.documentElement.setAttribute('data-theme', e.target.value);
-    localStorage.setItem('theme', e.target.value);
-  });
-  const savedTheme = localStorage.getItem('theme') || 'light';
-  $('theme').value = savedTheme;
-  document.documentElement.setAttribute('data-theme', savedTheme);
+  // === Theme toggle (brand-core §12) — sun/moon frosted pill ===
+  function setTheme(mode){
+    const t = (mode === 'dark') ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('theme', t); } catch(e){}
+    document.querySelectorAll('#themeToggle [data-theme-set]').forEach(b => {
+      b.classList.toggle('active', b.dataset.themeSet === t);
+    });
+  }
+  function toggleTheme(){
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    setTheme(current === 'dark' ? 'light' : 'dark');
+  }
+  const savedTheme = (() => { try { return localStorage.getItem('theme'); } catch(e){ return null; } })() || 'light';
+  setTheme(savedTheme);
+  const tt = document.getElementById('themeToggle');
+  if (tt){
+    tt.addEventListener('click', toggleTheme);
+    tt.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTheme(); } });
+  }
 }
 
 // ============================================
@@ -1075,7 +1248,10 @@ window.showTiersFor = function(key){
 // ============================================
 function renderHeader(tableId){
   const keys = colKeysFor(tableId);
-  $(tableId).querySelector('thead').innerHTML = '<tr>' + keys.map(k => `<th>${esc(colLabel(tableId, k))}</th>`).join('') + '</tr>';
+  $(tableId).querySelector('thead').innerHTML = '<tr>' + keys.map((k, i) => {
+    const cls = (i === 0) ? ' class="input-product-cell"' : '';
+    return `<th${cls}>${esc(colLabel(tableId, k))}</th>`;
+  }).join('') + '</tr>';
 }
 
 function buildCellMap(r){
@@ -1256,20 +1432,19 @@ async function runBulk(){
       };
       const byClass = { OnDemand: [], Spot: [], RI1Y: [], RI3Y: [] };
       for (const [k, g] of buckets){ const c = classOf(k); (byClass[c] || (byClass[c] = [])).push(g); }
-      // Round-robin across classes so all pricing models are represented.
-      const PER_INPUT_CAP = 20;
+      // Round-robin across classes so all pricing models are represented
+      // (preserves grouping order without truncating any rows).
       const order = ['OnDemand','RI1Y','RI3Y','Spot'];
       const picked = [];
-      while (picked.length < PER_INPUT_CAP){
-        let added = false;
+      let remaining = true;
+      while (remaining){
+        remaining = false;
         for (const cls of order){
           if (byClass[cls] && byClass[cls].length){
             picked.push(byClass[cls].shift());
-            added = true;
-            if (picked.length >= PER_INPUT_CAP) break;
+            remaining = true;
           }
         }
-        if (!added) break;
       }
       for (const group of picked){
         const base = group.find(g => !g.tierMinimumUnits) || group[0];
@@ -1949,21 +2124,31 @@ $('tierModal').addEventListener('click', (e) => { if (e.target.id === 'tierModal
 renderRows('bulkTbl', []);
 renderRows('usageTbl', []);
 
-// Disclaimer is permanent — no Hide/Show toggle. Clear any prior collapsed state.
-document.addEventListener('DOMContentLoaded', () => {
-  const bar = document.getElementById('disclaimerBar');
-  if (bar) bar.classList.remove('collapsed');
-  try { localStorage.removeItem('disclaimerCollapsed'); } catch(e){}
+// === Result-card pop-out (Expand to full screen) ===
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-expand]');
+  if (!btn) return;
+  const card = document.getElementById(btn.dataset.expand);
+  if (!card) return;
+  const expanded = card.classList.toggle('is-expanded');
+  document.body.classList.toggle('has-expanded-card', !!document.querySelector('.result-card.is-expanded'));
+  const label = btn.querySelector('[data-expand-label]');
+  if (label) label.textContent = expanded ? 'Collapse' : 'Expand';
+  btn.setAttribute('aria-label', expanded ? 'Collapse results table' : 'Expand results table to full screen');
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  document.querySelectorAll('.result-card.is-expanded').forEach(c => {
+    c.classList.remove('is-expanded');
+    const lbl = c.querySelector('[data-expand-label]');
+    if (lbl) lbl.textContent = 'Expand';
+    const b = c.querySelector('[data-expand]');
+    if (b) b.setAttribute('aria-label', 'Expand results table to full screen');
+  });
+  document.body.classList.remove('has-expanded-card');
 });
 </script>
 
-<div id="disclaimerBar" class="disclaimer-bar" role="region" aria-label="Legal disclaimer">
-  <div class="inner">
-    <span class="icon" aria-hidden="true">⚠</span>
-    <div class="text">
-      <strong>DISCLAIMER:</strong> This tool produces non-authoritative pricing estimates only. It is independently developed and is <strong>not endorsed, supported, or maintained by Microsoft</strong>. All output is provided "AS IS", without warranty of any kind, express or implied, including merchantability, fitness for a particular purpose, accuracy, or non-infringement. Pricing data is sourced from the public Azure Retail Prices API and may be incomplete, outdated, or misaligned with your specific Enterprise Agreement, Microsoft Customer Agreement, or commercial discount structure. <strong>You are solely responsible for verifying all figures against your official Microsoft pricing documents and Azure invoices before acting on them.</strong> In no event shall the authors, contributors, or distributors be liable for any direct, indirect, incidental, consequential, or punitive damages arising from use of, or inability to use, this tool.
-    </div>
-  </div>
-</div>
+<div class="expanded-backdrop" aria-hidden="true"></div>
 </body>
 </html>
