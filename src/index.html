@@ -1314,6 +1314,37 @@ function renderRows(tableId, rows){
 // ============================================
 // BULK LOOKUP
 // ============================================
+// EA Part Number index: PartNumber -> canonical EA Item Name
+// Loaded lazily from ea_partnumbers.json (~3MB, served gzipped ~285KB) at first bulk run.
+// When the seller provides a PartNumber on the input row we use the canonical EA Item
+// Name from this index instead of the (likely abbreviated / typo'd) name they pasted.
+// That gives us a clean, consistent input to feed into the MCA-side normalizer.
+// ============================================
+let EA_PART_INDEX = null;
+let EA_PART_INDEX_PROMISE = null;
+async function loadPartIndex(){
+  if (EA_PART_INDEX) return EA_PART_INDEX;
+  if (EA_PART_INDEX_PROMISE) return EA_PART_INDEX_PROMISE;
+  const candidates = ['ea_partnumbers.json', '/AzurePricing/ea_partnumbers.json', '../ea_partnumbers.json'];
+  EA_PART_INDEX_PROMISE = (async () => {
+    for (const url of candidates){
+      try {
+        const r = await fetch(url);
+        if (r.ok) { EA_PART_INDEX = await r.json(); return EA_PART_INDEX; }
+      } catch(e) {}
+    }
+    EA_PART_INDEX = {}; // not found — graceful fallback
+    return EA_PART_INDEX;
+  })();
+  return EA_PART_INDEX_PROMISE;
+}
+function lookupPartNumber(part){
+  if (!part || !EA_PART_INDEX) return null;
+  const k = String(part).trim();
+  return EA_PART_INDEX[k] || EA_PART_INDEX[k.toUpperCase()] || null;
+}
+
+// ============================================
 // EA SKU abbreviation expansion (word-boundary, case-insensitive).
 // EA invoice strings use abbreviations the Retail Prices API does not store.
 // CRITICAL: multi-word phrases are listed BEFORE their single-word components so
@@ -1387,6 +1418,56 @@ const EA_ALIASES = [
   [/\bStrg\b/gi, 'Storage'],
   [/\bCmt\s+Tier\b/gi, 'Commitment Tier'],
   [/\bDataStd\b/gi, 'Data Standard'],
+  // ---------- Added from EA price-sheet hit-rate analysis ----------
+  [/\bLow\s+Pri\b/gi, 'Low Priority'],
+  [/\bDvTst\b/gi, ''],                        // Dev/Test tier — strip; pricing rows are separate
+  [/\bPrvw\b/gi, 'Preview'],
+  [/\bHier\s+NS\b/gi, 'Hierarchical Namespace'],
+  [/\bFlat\s+NS\b/gi, 'Flat Namespace'],
+  [/\bArchv\b/gi, 'Archive'],
+  [/\bPITR\b/gi, 'Point In Time Restore'],
+  [/\bBkp\s+Stg\b/gi, 'Backup Storage'],
+  [/\bBkp\b/gi, 'Backup'],
+  [/\bBckp\b/gi, 'Backup'],
+  [/\bBkup\b/gi, 'Backup'],
+  [/\bBB\b/gi, 'Block Blob'],
+  [/\bBlk\s+Blob\b/gi, 'Block Blob'],
+  [/\bBsc\s+Win\b/gi, 'Basic Windows'],
+  [/\bBsc\b/gi, 'Basic'],
+  [/\bWin\b/gi, 'Windows'],
+  [/\bSgl\s+Svr\b/gi, 'Single Server'],
+  [/\bSgl\s+Prem\s+RS\b/gi, 'Single Premium RS'],
+  [/\bMdSv2\b/gi, 'MdSv2'],
+  [/\bMI\b/gi, 'Managed Instance'],
+  [/\bDL\s+Storage\b/gi, 'Data Lake Storage'],
+  [/\bAz\s+DB\s+for\s+MariaDB\b/gi, 'Azure Database for MariaDB'],
+  [/\bAz\s+DB\s+for\s+PostgreSQL\b/gi, 'Azure Database for PostgreSQL'],
+  [/\bAz\s+DB\s+for\s+MySQL\b/gi, 'Azure Database for MySQL'],
+  [/\bAz\s+HDI\b/gi, 'HDInsight'],
+  [/\bAz\s+Cloud\s+Svcs\b/gi, 'Cloud Services'],
+  [/\bAz\s+Cloud\s+Services\b/gi, 'Cloud Services'],
+  [/\bAz\s+Tiered\s+Blk\s+Blob\b/gi, 'Tiered Block Blob'],
+  [/\bAz\s+Prem\s+Page\s+Blob\b/gi, 'Premium Page Blob'],
+  [/\bAz\s+Std\s+Page\s+Blob\b/gi, 'Standard Page Blob'],
+  [/\bAz\s+Prem\s+BB\b/gi, 'Premium Block Blob'],
+  [/\bAz\s+Key\s+Vault\b/gi, 'Key Vault'],
+  [/\bAz\s+Active\s+Directory\b/gi, 'Azure Active Directory'],
+  [/\bAz\s+AD\b/gi, 'Azure Active Directory'],
+  [/\bRA-GRS\b/gi, 'RA-GRS'],     // keep as-is
+  [/\bZRS\b/gi, 'ZRS'],
+  [/\bLRS\b/gi, 'LRS'],
+  [/\bGRS\b/gi, 'GRS'],
+  [/\bGZRS\b/gi, 'GZRS'],
+  [/\bRsv\b/gi, 'Reservation'],
+  [/\bCont\b/gi, 'Continuous'],
+  [/\bData\s+Stored\b/gi, 'Data Stored'],
+  [/\bW\s+Ops\b/gi, 'Write Operations'],
+  [/\bR\s+Ops\b/gi, 'Read Operations'],
+  [/\bWrite\s+Ops\b/gi, 'Write Operations'],
+  [/\bRead\s+Ops\b/gi, 'Read Operations'],
+  [/\bOps\b/gi, 'Operations'],
+  [/\bDsk\b/gi, 'Disk'],
+  [/\bStg\b/gi, 'Storage'],
 ];
 
 // Detect EA "series rollup" / catalog parent rows that have NO pricing meter (just a
@@ -1525,14 +1606,89 @@ function splitProductString(raw){
   };
 }
 
+// Shared EA-aware product search. Returns Items[] (possibly empty) using the full
+// normalization stack (alias expansion, region detection, slash-pair expansion, fuzzy
+// fallback). Used by runBulk for pasted SKUs AND by runUsage as Tier-4 when meterId,
+// armSkuName and raw-productName lookups all returned 0 rows.
+async function eaNormalizedSearch(productString, regionHint, progressCb){
+  if (!productString) return {items: [], norm: null, split: null};
+  const norm = normalizeEaSku(productString);
+  const split = splitProductString(norm.normalized || productString);
+  const armRegion = norm.region || (regionHint ? String(regionHint).toLowerCase().replace(/\s+/g,'') : '');
+  const splitPair = (s) => {
+    if (!s || !s.includes('/')) return [s];
+    const halves = s.split('/').map(h => h.trim()).filter(h => /^[A-Za-z0-9 .v]+$/.test(h));
+    return halves.length >= 2 ? halves : [s];
+  };
+  const pnVariants    = splitPair(split.productName || '').map(v => v.replace(/'/g,"''"));
+  const meterVariants = split.middleParts.length
+    ? splitPair(split.middleParts[split.middleParts.length-1]).map(v => v.replace(/'/g,"''"))
+    : [''];
+  const skuVariants   = split.middleParts[0]
+    ? splitPair(split.middleParts[0]).map(v => v.replace(/'/g,"''"))
+    : [''];
+  const tryFilters = [];
+  for (const pn of pnVariants){
+    for (const m of meterVariants) if (pn && m && armRegion) tryFilters.push(`contains(productName, '${pn}') and contains(meterName, '${m}') and armRegionName eq '${armRegion}'`);
+    for (const s of skuVariants)   if (pn && s && armRegion) tryFilters.push(`contains(productName, '${pn}') and contains(skuName, '${s}') and armRegionName eq '${armRegion}'`);
+  }
+  for (const pn of pnVariants){
+    for (const m of meterVariants) if (pn && m) tryFilters.push(`contains(productName, '${pn}') and contains(meterName, '${m}')`);
+    for (const s of skuVariants)   if (pn && s) tryFilters.push(`contains(productName, '${pn}') and contains(skuName, '${s}')`);
+  }
+  for (const pn of pnVariants) if (pn) tryFilters.push(`productName eq '${pn}'`);
+  for (const pn of pnVariants) if (pn) tryFilters.push(`contains(productName, '${pn}')`);
+  let items = [];
+  for (const f of tryFilters){
+    try{
+      const j = await apiFetchAll(f, 10, progressCb);
+      if (j.Items?.length){ items = j.Items; break; }
+    }catch(e){}
+  }
+  // Fuzzy fallback: broad search on first token + token-overlap scoring.
+  if (!items.length && pnVariants[0]){
+    const broadToken = pnVariants[0].split(/\s+/)[0];
+    if (broadToken && broadToken.length >= 3){
+      try{
+        const j = await apiFetchAll(`contains(productName, '${broadToken.replace(/'/g,"''")}')`, 3);
+        const cand = j.Items || [];
+        if (cand.length){
+          const inputTokens = `${pnVariants[0]} ${split.middleParts.join(' ')}`
+            .toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length >= 2);
+          const need = Math.max(2, Math.ceil(inputTokens.length / 2));
+          let best = null, bestScore = 0;
+          for (const c of cand){
+            const hay = `${c.productName||''} ${c.skuName||''} ${c.meterName||''}`.toLowerCase();
+            let sc = 0;
+            for (const t of inputTokens) if (hay.includes(t)) sc++;
+            if (armRegion && (c.armRegionName||'').toLowerCase() === armRegion) sc += 2;
+            if (sc > bestScore){ bestScore = sc; best = c; }
+          }
+          if (best && bestScore >= need) items = cand.filter(c => c.meterId === best.meterId);
+        }
+      }catch(e){}
+    }
+  }
+  return {items, norm, split};
+}
+
 async function runBulk(){
   const parsed = parseBulkInput($('bulkInput').value);
   const globalRegion = $('bulkRegion').value.trim();
   if (!parsed.length){ $('bulkStatus').textContent = 'Provide at least one product (one per line; tab/comma separates Product and PartNumber).'; return; }
   $('bulkStatus').textContent = `Looking up ${parsed.length} product(s)...`;
+  // Load EA Part Number index (cheap if already cached). This maps PartNumber -> canonical
+  // EA Item Name so the MCA-side normalizer sees a clean, consistent string regardless of
+  // what abbreviated / typo'd form the seller pasted.
+  await loadPartIndex();
   const rows = [];
   for (let idx=0; idx<parsed.length; idx++){
-    const {product, partNumber} = parsed[idx];
+    const {product: pastedProduct, partNumber} = parsed[idx];
+    // Prefer canonical EA Item Name from the Part Number index when available; fall back
+    // to whatever the seller pasted. Track which one we used so the result can flag it.
+    const canonical = lookupPartNumber(partNumber);
+    const product = canonical || pastedProduct;
+    const matchedBy = canonical ? 'PartNumber' : (pastedProduct ? 'TypedName' : 'None');
     $('bulkStatus').textContent = `Processing ${idx+1}/${parsed.length}: ${product || partNumber}`;
     try{
       // Series-rollup detection: EA invoice parent rows ("VM M Series", "Specialized
@@ -1552,17 +1708,50 @@ async function runBulk(){
       // Try multiple search strategies. Do NOT restrict type — we want OnDemand AND Reservation
       // (and Spot, which lives in Consumption with "Spot" in the SKU/meter name).
       const tryFilters = [];
-      const pn = split.productName ? split.productName.replace(/'/g,"''") : '';
-      const meterPart = split.middleParts.length ? split.middleParts[split.middleParts.length-1].replace(/'/g,"''") : '';
-      const skuPart = split.middleParts[0] ? split.middleParts[0].replace(/'/g,"''") : '';
       const armRegion = norm.region; // already lowercase armRegionName (e.g. 'eastus2') or ''
-      // Order: most specific first so we avoid fetching 1000s of broad rows when we have product+meter+region.
-      if (pn && meterPart && armRegion) tryFilters.push(`contains(productName, '${pn}') and contains(meterName, '${meterPart}') and armRegionName eq '${armRegion}'`);
-      if (pn && skuPart && armRegion)   tryFilters.push(`contains(productName, '${pn}') and contains(skuName, '${skuPart}') and armRegionName eq '${armRegion}'`);
-      if (pn && meterPart)              tryFilters.push(`contains(productName, '${pn}') and contains(meterName, '${meterPart}')`);
-      if (pn && skuPart)                tryFilters.push(`contains(productName, '${pn}') and contains(skuName, '${skuPart}')`);
-      if (pn)                           tryFilters.push(`productName eq '${pn}'`);
-      if (pn)                           tryFilters.push(`contains(productName, '${pn}')`);
+      // Slash-pair expansion: EA bills paired SKUs ("Dv2/DSv2", "D5 v2/DS5 v2") as one
+      // string but the API splits them into separate productName/skuName values.
+      // Generate each half and tee up filters for both. Order: each pair before the next field.
+      const splitPair = (s) => {
+        if (!s || !s.includes('/')) return [s];
+        // Only split if both sides look like SKU identifiers (alphanumeric + spaces).
+        const halves = s.split('/').map(h => h.trim()).filter(h => /^[A-Za-z0-9 .v]+$/.test(h));
+        return halves.length >= 2 ? halves : [s];
+      };
+      const pnVariants    = splitPair(split.productName || '').map(v => v.replace(/'/g,"''"));
+      const meterVariants = split.middleParts.length
+        ? splitPair(split.middleParts[split.middleParts.length-1]).map(v => v.replace(/'/g,"''"))
+        : [''];
+      const skuVariants   = split.middleParts[0]
+        ? splitPair(split.middleParts[0]).map(v => v.replace(/'/g,"''"))
+        : [''];
+      // Cross-product the variants, most-specific filter first.
+      for (const pn of pnVariants){
+        for (const meterPart of meterVariants){
+          if (pn && meterPart && armRegion) tryFilters.push(`contains(productName, '${pn}') and contains(meterName, '${meterPart}') and armRegionName eq '${armRegion}'`);
+        }
+        for (const skuPart of skuVariants){
+          if (pn && skuPart && armRegion)   tryFilters.push(`contains(productName, '${pn}') and contains(skuName, '${skuPart}') and armRegionName eq '${armRegion}'`);
+        }
+      }
+      for (const pn of pnVariants){
+        for (const meterPart of meterVariants){
+          if (pn && meterPart) tryFilters.push(`contains(productName, '${pn}') and contains(meterName, '${meterPart}')`);
+        }
+        for (const skuPart of skuVariants){
+          if (pn && skuPart)   tryFilters.push(`contains(productName, '${pn}') and contains(skuName, '${skuPart}')`);
+        }
+      }
+      for (const pn of pnVariants){
+        if (pn) tryFilters.push(`productName eq '${pn}'`);
+      }
+      for (const pn of pnVariants){
+        if (pn) tryFilters.push(`contains(productName, '${pn}')`);
+      }
+      // Use the first variant for the broad-search fallback below.
+      const pn = pnVariants[0] || '';
+      const skuPart = skuVariants[0] || '';
+      const meterPart = meterVariants[meterVariants.length-1] || '';
       let items = [];
       for (const f of tryFilters){
         try{
@@ -2058,6 +2247,20 @@ async function runUsage(){
       }
       if (!api?.Items?.length && g.inputProduct){
         api = await apiFetch(`contains(productName, '${String(g.inputProduct).replace(/'/g,"''")}')`);
+      }
+      // Tier-4: meterId / armSkuName / raw-productName all missed. This happens when
+      // the EA invoice carries a retired meterId, or the productName uses EA-only
+      // abbreviations the Retail API doesn't carry verbatim. Run the row through the
+      // shared EA-aware normalizer (alias expansion + slash-pair + fuzzy fallback),
+      // and prefer the canonical Item Name from the PartNumber index when present.
+      if (!api?.Items?.length){
+        try{ await loadPartIndex(); }catch(e){}
+        const canonical = lookupPartNumber(g.inputPartNumber);
+        const seed = canonical || g.inputProduct || g.meterName || g.skuName || '';
+        if (seed){
+          const r = await eaNormalizedSearch(seed, g.armRegionName || g.location || region);
+          if (r.items.length) api = {Items: r.items};
+        }
       }
       const list = api?.Items || [];
       if (list.length){
