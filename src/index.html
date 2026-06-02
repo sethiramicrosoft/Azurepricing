@@ -1345,6 +1345,126 @@ function lookupPartNumber(part){
 }
 
 // ============================================
+// Azure catalog index: precomputed list of (productName, skuName, meterName, region,
+// unitOfMeasure, meterId) crawled from the Retail Prices API. Used to fuzzy-match
+// arbitrary EA strings to the exact MCA meterId WITHOUT having to maintain alias
+// dictionaries for every Azure service. Loaded once on first Bulk/Usage call.
+// Format: { version, products: [...], meters: [{p,s,m,r,u,f,id}, ...] }
+// ============================================
+let AZ_CATALOG = null;
+let AZ_CATALOG_PROMISE = null;
+async function loadCatalog(){
+  if (AZ_CATALOG) return AZ_CATALOG;
+  if (AZ_CATALOG_PROMISE) return AZ_CATALOG_PROMISE;
+  const candidates = ['azure_catalog.json', '/AzurePricing/azure_catalog.json', '../azure_catalog.json'];
+  AZ_CATALOG_PROMISE = (async () => {
+    for (const url of candidates){
+      try {
+        const r = await fetch(url);
+        if (r.ok) { AZ_CATALOG = await r.json(); return AZ_CATALOG; }
+      } catch(e) {}
+    }
+    AZ_CATALOG = {products: [], meters: []};
+    return AZ_CATALOG;
+  })();
+  return AZ_CATALOG_PROMISE;
+}
+
+// Tokenize a user-pasted EA string into matchable lowercase tokens.
+// Strips UoM, region shortcodes, and EA-only filler ("az", "the").
+function tokenize(s){
+  if (!s) return [];
+  s = String(s).toLowerCase()
+    .replace(UOM_STRIP_RE, ' ')
+    .replace(/[^a-z0-9]+/g, ' ');
+  const stop = new Set(['az','azure','the','a','an','for','and','or','of','to','in','on']);
+  return s.split(/\s+/).filter(t => t && t.length >= 2 && !stop.has(t));
+}
+
+// Abbreviation-aware token similarity. Returns 0..3.
+//   exact word                      -> 3
+//   numeric/version exact           -> 3   (v2, p40, 10k)
+//   prefix (short is prefix of long, both >=2)  -> 2  ("svc" of "service")
+//   subsequence (letters in order, >=3 chars)   -> 1  ("mngd" in "managed")
+function abbrevScore(userTok, catTok){
+  if (!userTok || !catTok) return 0;
+  if (userTok === catTok) return 3;
+  // version/sku codes like "v2", "p40", "10k" only count on exact match
+  if (/\d/.test(userTok) || /\d/.test(catTok)) return 0;
+  if (userTok.length >= 2 && catTok.length >= 2){
+    if (catTok.startsWith(userTok)) return 2;
+    if (userTok.startsWith(catTok)) return 2;
+  }
+  if (userTok.length >= 3){
+    let i = 0;
+    for (const ch of catTok){ if (i < userTok.length && ch === userTok[i]) i++; }
+    if (i === userTok.length) return 1;
+  }
+  return 0;
+}
+
+// Score how well a user's tokens match a catalog string's tokens. Each user token
+// picks its best matching catalog token (no double-counting). Returns total score.
+function matchTokens(userTokens, catTokens){
+  if (!userTokens.length || !catTokens.length) return 0;
+  let total = 0;
+  const used = new Set();
+  for (const ut of userTokens){
+    let best = 0, bestIdx = -1;
+    for (let i = 0; i < catTokens.length; i++){
+      if (used.has(i)) continue;
+      const s = abbrevScore(ut, catTokens[i]);
+      if (s > best){ best = s; bestIdx = i; }
+    }
+    if (best > 0){ total += best; if (bestIdx >= 0) used.add(bestIdx); }
+  }
+  return total;
+}
+
+// Tier-0 catalog match. Returns {meter, score, productMatched} or null if confidence
+// is below threshold. Caller falls through to existing tiers when null.
+//   inputString: raw user-pasted product string (may include UoM, region, abbrevs)
+//   regionHint:  optional armRegionName (from EA shortcode detection)
+function catalogMatch(inputString, regionHint){
+  if (!AZ_CATALOG || !AZ_CATALOG.meters || !AZ_CATALOG.meters.length) return null;
+  const userTokens = tokenize(inputString);
+  if (userTokens.length < 2) return null;
+  const region = (regionHint || '').toLowerCase();
+
+  // Stage 1: pick top product(s). Cache tokenized product names on the catalog.
+  if (!AZ_CATALOG._productToks){
+    AZ_CATALOG._productToks = AZ_CATALOG.products.map(p => ({name: p, toks: tokenize(p)}));
+  }
+  const productScored = [];
+  for (const p of AZ_CATALOG._productToks){
+    const sc = matchTokens(userTokens, p.toks);
+    if (sc >= 3) productScored.push({name: p.name, score: sc});
+  }
+  if (!productScored.length) return null;
+  productScored.sort((a,b) => b.score - a.score);
+  // Keep all products whose score is within 1 of the best (handles ties like
+  // "Service Bus" vs "Service Bus Premium" if both exist).
+  const topScore = productScored[0].score;
+  const topProducts = productScored.filter(p => p.score >= topScore - 1).slice(0, 5);
+  const topNames = new Set(topProducts.map(p => p.name));
+
+  // Stage 2: among meters for those products, score on (sku + meter) tokens.
+  let best = null, bestScore = 0;
+  for (const m of AZ_CATALOG.meters){
+    if (!topNames.has(m.p)) continue;
+    const meterToks = tokenize(`${m.s} ${m.m}`);
+    let sc = matchTokens(userTokens, meterToks);
+    const pscore = topProducts.find(p => p.name === m.p)?.score || 0;
+    sc += pscore;
+    if (sc > bestScore){ bestScore = sc; best = m; }
+  }
+  if (!best) return null;
+  // Confidence threshold: product score >= 3 AND total >= 6 (product+meter minimum).
+  if (bestScore < 6) return null;
+  return {meter: best, score: bestScore, productMatched: best.p};
+}
+
+// ============================================
 // EA SKU abbreviation expansion (word-boundary, case-insensitive).
 // EA invoice strings use abbreviations the Retail Prices API does not store.
 // CRITICAL: multi-word phrases are listed BEFORE their single-word components so
@@ -1615,6 +1735,28 @@ async function eaNormalizedSearch(productString, regionHint, progressCb){
   const norm = normalizeEaSku(productString);
   const split = splitProductString(norm.normalized || productString);
   const armRegion = norm.region || (regionHint ? String(regionHint).toLowerCase().replace(/\s+/g,'') : '');
+
+  // Tier 0: catalog match. If our precomputed catalog has a high-confidence match
+  // for this string, query the API with the EXACT (productName, meterName, skuName)
+  // tuple plus region — guaranteed to return the right meter without alias guesswork.
+  try{
+    await loadCatalog();
+    const cm = catalogMatch(productString, armRegion);
+    if (cm && cm.meter){
+      const m = cm.meter;
+      const esc = s => String(s||'').replace(/'/g,"''");
+      const filters = [];
+      if (armRegion) filters.push(`productName eq '${esc(m.p)}' and meterName eq '${esc(m.m)}' and skuName eq '${esc(m.s)}' and armRegionName eq '${armRegion}'`);
+      filters.push(`productName eq '${esc(m.p)}' and meterName eq '${esc(m.m)}' and skuName eq '${esc(m.s)}'`);
+      for (const f of filters){
+        try{
+          const j = await apiFetch(f);
+          if (j?.Items?.length) return {items: j.Items, norm, split, catalogMatch: cm};
+        }catch(e){}
+      }
+    }
+  }catch(e){}
+
   const splitPair = (s) => {
     if (!s || !s.includes('/')) return [s];
     const halves = s.split('/').map(h => h.trim()).filter(h => /^[A-Za-z0-9 .v]+$/.test(h));
@@ -1681,6 +1823,7 @@ async function runBulk(){
   // EA Item Name so the MCA-side normalizer sees a clean, consistent string regardless of
   // what abbreviated / typo'd form the seller pasted.
   await loadPartIndex();
+  await loadCatalog();
   const rows = [];
   for (let idx=0; idx<parsed.length; idx++){
     const {product: pastedProduct, partNumber} = parsed[idx];
