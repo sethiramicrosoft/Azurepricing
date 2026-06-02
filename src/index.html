@@ -688,7 +688,7 @@ body.has-expanded-card .expanded-backdrop{display:block}
 // ============================================
 const PROXY = window.location.protocol.startsWith('http')
   ? `${window.location.origin}/api/prices`
-  : '/api/prices';
+  : 'https://prices.azure.com/api/retail/prices';
 
 // Source: https://learn.microsoft.com/en-us/azure/cost-management-billing/microsoft-customer-agreement/microsoft-customer-agreement-faq
 // "Under the Microsoft Customer Agreement, in which currency is my payment processed?"
@@ -1314,6 +1314,81 @@ function renderRows(tableId, rows){
 // ============================================
 // BULK LOOKUP
 // ============================================
+// EA SKU abbreviation expansion (word-boundary, case-insensitive).
+// EA invoice strings use abbreviations the Retail Prices API does not store.
+// Example: "Az OpenAI-Prov Mngd Global Unit-10/Hr-US E2" -> "Azure OpenAI - Provisioned Managed Global Unit - eastus2"
+const EA_ALIASES = [
+  [/\bAz\s+OpenAI\b/gi, 'Azure OpenAI'],
+  [/\bAz\b/gi, 'Azure'],
+  [/\bProv\s+Mngd\b/gi, 'Provisioned Managed'],
+  [/\bProv\b/gi, 'Provisioned'],
+  [/\bMngd\b/gi, 'Managed'],
+  [/\bMgd\b/gi, 'Managed'],
+  [/\bMgmt\b/gi, 'Management'],
+  [/\bStd\b/gi, 'Standard'],
+  [/\bPrem\b/gi, 'Premium'],
+  [/\bSvcs\b/gi, 'Services'],
+  [/\bSrvcs\b/gi, 'Services'],
+  [/\bSvc\b/gi, 'Service'],
+];
+
+// EA region shortcode -> Azure armRegionName (lowercase, no spaces). Used to identify
+// and strip the trailing region segment from EA SKU strings so it can drive a precise
+// filter instead of a brittle substring search.
+const EA_REGION_MAP = {
+  'us e':'eastus','us e2':'eastus2','us w':'westus','us w2':'westus2','us w3':'westus3',
+  'us c':'centralus','us nc':'northcentralus','us sc':'southcentralus','us wc':'westcentralus',
+  'au e':'australiaeast','au se':'australiasoutheast','au c':'australiacentral','au c2':'australiacentral2',
+  'de wc':'germanywestcentral','de n':'germanynorth',
+  'ja e':'japaneast','ja w':'japanwest',
+  'kr c':'koreacentral','kr s':'koreasouth',
+  'ap se':'southeastasia','ap e':'eastasia',
+  'in s':'southindia','in c':'centralindia','in w':'westindia',
+  'se c':'swedencentral',
+  'ae n':'uaenorth','ae c':'uaecentral',
+  'uk s':'uksouth','uk w':'ukwest',
+  'eu n':'northeurope','eu w':'westeurope',
+  'br s':'brazilsouth',
+  'ca c':'canadacentral','ca e':'canadaeast',
+  'fr c':'francecentral','fr s':'francesouth',
+  'no e':'norwayeast','no w':'norwaywest',
+  'ch n':'switzerlandnorth','ch w':'switzerlandwest',
+  'za n':'southafricanorth','za w':'southafricawest',
+  'pl c':'polandcentral','il c':'israelcentral','it n':'italynorth',
+  'mx c':'mexicocentral','my w':'malaysiawest','nz n':'newzealandnorth','tw n':'taiwannorth','sg e':'southeastasia',
+  'qa c':'qatarcentral','be c':'belgiumcentral','sp c':'spaincentral',
+};
+
+// Strip embedded UoM tokens like "10/Hr", "1/Hour", "100 Hours" so they don't pollute
+// the product/meter name search. EA glues UoM into the SKU string; the API exposes it
+// as a separate unitOfMeasure field.
+const UOM_STRIP_RE = /\b\d+(?:\.\d+)?(?:K|M)?\s*\/\s*(?:Hr|Hour|Hours|Mo|Month|Day|Days|Min|Sec|GB|MB|TB)\b|\b\d+(?:\.\d+)?\s+(?:Hours|Days|Months)\b/gi;
+
+// Returns { normalized, region } where region is an armRegionName if an EA shortcode
+// was detected in the trailing segment (and stripped from the normalized string).
+function normalizeEaSku(raw){
+  let s = String(raw||'').trim();
+  if (!s) return { normalized: s, region: '' };
+  s = s.replace(UOM_STRIP_RE, '').replace(/\s{2,}/g,' ').trim();
+  // Collapse orphan dash-pairs left where a UoM token used to live (e.g. "Unit--US E2" or "Unit- -US E2" -> "Unit - US E2")
+  s = s.replace(/\s*-\s*-\s*/g, ' - ');
+  for (const [re, sub] of EA_ALIASES) s = s.replace(re, sub);
+  // Force " - " around hyphens between word chars so splitProductString's /\s+-\s+/ catches EA's glued format.
+  s = s.replace(/([A-Za-z0-9])\s*-\s*([A-Za-z0-9])/g, '$1 - $2');
+  let armRegion = '';
+  const parts = s.split(/\s+-\s+/);
+  if (parts.length > 1){
+    const last = parts[parts.length-1].trim().toLowerCase().replace(/\s+/g,' ');
+    if (EA_REGION_MAP[last]){
+      armRegion = EA_REGION_MAP[last];
+      parts.pop();
+      s = parts.join(' - ');
+    }
+  }
+  s = s.replace(/\s+-\s+-\s+/g,' - ').replace(/\s+-\s*$/,'').trim();
+  return { normalized: s, region: armRegion };
+}
+
 // Known Azure regions for parsing product strings like "...- AU Southeast"
 const KNOWN_REGIONS = ['AU East','AU Southeast','AU Central','AU Central 2','US East','US East 2','US West','US West 2','US West 3','US Central','US North Central','US South Central','US West Central','EU North','EU West','UK South','UK West','AP East','AP Southeast','JA East','JA West','IN Central','IN South','IN West','IN West Jio','BR South','CA Central','CA East','FR Central','FR South','DE West Central','DE North','NO East','NO West','CH North','CH West','UAE North','UAE Central','ZA North','ZA West','KR Central','KR South','SE Central','PL Central','IL Central','IT North','MX Central','SG East','MY West','NZ North','TW North'];
 
@@ -1373,18 +1448,26 @@ async function runBulk(){
     const {product, partNumber} = parsed[idx];
     $('bulkStatus').textContent = `Processing ${idx+1}/${parsed.length}: ${product || partNumber}`;
     try{
-      const split = splitProductString(product);
-      const region = split.region || globalRegion;
+      const norm = normalizeEaSku(product);
+      const split = splitProductString(norm.normalized || product);
+      // Region precedence: EA shortcode detected by normalizer (armRegionName, e.g. "eastus2")
+      // > splitProductString's KNOWN_REGIONS detection (canonical, e.g. "US East 2")
+      // > global region filter from the UI.
+      const region = norm.region || split.region || globalRegion;
       // Try multiple search strategies. Do NOT restrict type — we want OnDemand AND Reservation
       // (and Spot, which lives in Consumption with "Spot" in the SKU/meter name).
       const tryFilters = [];
-      if (split.productName) tryFilters.push(`productName eq '${split.productName.replace(/'/g,"''")}'`);
-      if (split.productName) tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}')`);
-      if (split.middleParts[0]) tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(skuName, '${split.middleParts[0].replace(/'/g,"''")}')`);
-      if (split.middleParts.length){
-        const meterPart = split.middleParts[split.middleParts.length-1];
-        tryFilters.push(`contains(productName, '${split.productName.replace(/'/g,"''")}') and contains(meterName, '${meterPart.replace(/'/g,"''")}')`);
-      }
+      const pn = split.productName ? split.productName.replace(/'/g,"''") : '';
+      const meterPart = split.middleParts.length ? split.middleParts[split.middleParts.length-1].replace(/'/g,"''") : '';
+      const skuPart = split.middleParts[0] ? split.middleParts[0].replace(/'/g,"''") : '';
+      const armRegion = norm.region; // already lowercase armRegionName (e.g. 'eastus2') or ''
+      // Order: most specific first so we avoid fetching 1000s of broad rows when we have product+meter+region.
+      if (pn && meterPart && armRegion) tryFilters.push(`contains(productName, '${pn}') and contains(meterName, '${meterPart}') and armRegionName eq '${armRegion}'`);
+      if (pn && skuPart && armRegion)   tryFilters.push(`contains(productName, '${pn}') and contains(skuName, '${skuPart}') and armRegionName eq '${armRegion}'`);
+      if (pn && meterPart)              tryFilters.push(`contains(productName, '${pn}') and contains(meterName, '${meterPart}')`);
+      if (pn && skuPart)                tryFilters.push(`contains(productName, '${pn}') and contains(skuName, '${skuPart}')`);
+      if (pn)                           tryFilters.push(`productName eq '${pn}'`);
+      if (pn)                           tryFilters.push(`contains(productName, '${pn}')`);
       let items = [];
       for (const f of tryFilters){
         try{
