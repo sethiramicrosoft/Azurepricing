@@ -1316,9 +1316,43 @@ function renderRows(tableId, rows){
 // ============================================
 // EA SKU abbreviation expansion (word-boundary, case-insensitive).
 // EA invoice strings use abbreviations the Retail Prices API does not store.
-// Example: "Az OpenAI-Prov Mngd Global Unit-10/Hr-US E2" -> "Azure OpenAI - Provisioned Managed Global Unit - eastus2"
+// CRITICAL: multi-word phrases are listed BEFORE their single-word components so
+// "Az Svc Bus" rewrites to "Service Bus" before the lone "Svc -> Service" rule fires.
+// Each entry maps an EA abbreviation pattern to the canonical API productName/meterName fragment.
 const EA_ALIASES = [
+  // ---------- Product-prefix expansions (multi-word, longest first) ----------
+  [/\bAz\s+Svc\s+Bus\b/gi, 'Service Bus'],
+  [/\bAz\s+App\s+Svc\b/gi, 'App Service'],
+  [/\bAz\s+App\s+GW\b/gi, 'Application Gateway'],
+  [/\bAz\s+NAT\s+GW\b/gi, 'Virtual Network NAT'],
+  [/\bAz\s+SQL\s+DB(\s+Sgl\/El\s+Pool)?\b/gi, 'SQL Database'],
+  [/\bAz\s+Cosmos\s+DB\b/gi, 'Azure Cosmos DB'],
+  [/\bAz\s+Redis\s+Cache\b/gi, 'Azure Cache for Redis'],
+  [/\bAz\s+Log\s+Analytics\b/gi, 'Log Analytics'],
+  [/\bAz\s+Event\s+Hubs\b/gi, 'Event Hubs'],
+  [/\bAz\s+ExpRoute\b/gi, 'ExpressRoute'],
+  [/\bAz\s+Prem\s+Functions\b/gi, 'Functions Premium'],
+  [/\bAz\s+Prem\s+Files\b/gi, 'Azure Files'],
+  [/\bAz\s+NetApp\s+Files\b/gi, 'Azure NetApp Files'],
+  [/\bAz\s+Static\s+Web\s+Apps\b/gi, 'Azure Static Web Apps'],
+  [/\bAz\s+Virtual\s+NW\s+Pvt\s+Link\b/gi, 'Virtual Network Private Link'],
+  [/\bAz\s+Prem\s+SSD\s+Mngd\s+Dsks\b/gi, 'Premium SSD Managed Disks'],
+  [/\bAz\s+Std\s+SSD\s+Mgd\s+Disks\b/gi, 'Standard SSD Managed Disks'],
+  [/\bAz\s+Std\s+HDD\s+Mgd\s+Disks\b/gi, 'Standard HDD Managed Disks'],
+  [/\bAz\s+Gen\s+Blk\s+Blob\s+v2\b/gi, 'General Block Blob v2'],
+  [/\bAz\s+Monitor\b/gi, 'Azure Monitor'],
+  [/\bAz\s+Firewall\b/gi, 'Azure Firewall'],
+  [/\bAz\s+BKP\b/gi, 'Backup'],
+  [/\bAz\s+Ins\s+and\s+Analytics\b/gi, 'Insight and Analytics'],
   [/\bAz\s+OpenAI\b/gi, 'Azure OpenAI'],
+  [/\bAz\s+Rtn\s+Pref\b/gi, 'Routing Preference'],
+  [/\bAz\s+VM\b/gi, 'Virtual Machines'],
+  [/\bMicrosoft\s+Defender\s+for\s+Strg\b/gi, 'Microsoft Defender for Storage'],
+  [/\bAz\s+GitHub\s+Adv\s+Security\b/gi, 'GitHub Advanced Security'],
+  [/\bGitHub\s+Copilot\b/gi, 'GitHub Copilot'],
+  // ---------- Bare "VM" (not preceded by "Az") at start of name ----------
+  [/^VM\b/gi, 'Virtual Machines'],
+  // ---------- Single-word generic expansions ----------
   [/\bAz\b/gi, 'Azure'],
   [/\bProv\s+Mngd\b/gi, 'Provisioned Managed'],
   [/\bProv\b/gi, 'Provisioned'],
@@ -1327,10 +1361,38 @@ const EA_ALIASES = [
   [/\bMgmt\b/gi, 'Management'],
   [/\bStd\b/gi, 'Standard'],
   [/\bPrem\b/gi, 'Premium'],
+  [/\bDsks\b/gi, 'Disks'],
+  [/\bSrs\b/gi, 'Series'],
   [/\bSvcs\b/gi, 'Services'],
   [/\bSrvcs\b/gi, 'Services'],
   [/\bSvc\b/gi, 'Service'],
+  [/\bComp\b/gi, 'Compute'],
+  [/\bSol\b/gi, 'Solution'],
+  [/\bDT\s+Out\b/gi, 'Data Transfer Out'],
+  [/\bDT\s+In\b/gi, 'Data Transfer In'],
+  [/\bData\s+Proc\b/gi, 'Data Processed'],
+  [/\bThrput\b/gi, 'Throughput'],
+  [/\bvC\b/gi, 'vCore'],
+  [/\bEndpt\b/gi, 'Endpoint'],
+  [/\bPvt\b/gi, 'Private'],
+  [/\bResv\b/gi, 'Reservation'],
+  [/\bMtd\b/gi, 'Metered'],
+  [/\bOvg\b/gi, 'Overage'],
+  [/\bProt\s+Inst\b/gi, 'Protected Instance'],
+  [/\bTrxns\b/gi, 'Transactions'],
+  [/\bBus\s+Cri\b/gi, 'Business Critical'],
+  [/\bSgl\b/gi, 'Single'],
+  [/\bEl\s+Pool\b/gi, 'Elastic Pool'],
+  [/\bNW\b/gi, 'Network'],
+  [/\bStrg\b/gi, 'Storage'],
+  [/\bCmt\s+Tier\b/gi, 'Commitment Tier'],
+  [/\bDataStd\b/gi, 'Data Standard'],
 ];
+
+// Detect EA "series rollup" / catalog parent rows that have NO pricing meter (just a
+// category label). The API only carries individual child SKUs (e.g. "M8ms" not
+// "Virtual Machines MS Series"), so these always return 0 rows; flag them clearly.
+const SERIES_ROLLUP_RE = /(?:^|\s)(?:Virtual\s+Machines|VM)\s+\S+\s+Series\s*$|^Specialized\s+(?:Comp(?:ute)?)\s+\S+\s+(?:Sol(?:ution)?)?\s*$/i;
 
 // EA region shortcode -> Azure armRegionName (lowercase, no spaces). Used to identify
 // and strip the trailing region segment from EA SKU strings so it can drive a precise
@@ -1359,10 +1421,18 @@ const EA_REGION_MAP = {
   'qa c':'qatarcentral','be c':'belgiumcentral','sp c':'spaincentral',
 };
 
-// Strip embedded UoM tokens like "10/Hr", "1/Hour", "100 Hours" so they don't pollute
-// the product/meter name search. EA glues UoM into the SKU string; the API exposes it
-// as a separate unitOfMeasure field.
-const UOM_STRIP_RE = /\b\d+(?:\.\d+)?(?:K|M)?\s*\/\s*(?:Hr|Hour|Hours|Mo|Month|Day|Days|Min|Sec|GB|MB|TB)\b|\b\d+(?:\.\d+)?\s+(?:Hours|Days|Months)\b/gi;
+// Strip embedded UoM tokens like "10/Hr", "1/Hour", "100 Hrs", "10K GiB/Hr", "1 TB",
+// "100 RU/s", "1 vCore". EA glues UoM into the SKU string; the API exposes it as a
+// separate unitOfMeasure field so leaving it in pollutes the productName/meterName
+// search. The "Snapshots"/"Disks" suffix on storage rows is meaningful so don't strip it.
+const UOM_STRIP_RE = new RegExp([
+  // numeric + size unit + / + time (e.g. "10K GiB/Hr", "100 GB/Mo", "10/Hr", "1K/Hr")
+  String.raw`\b\d+(?:\.\d+)?(?:K|M)?\s*(?:Gi?B|Ti?B|Mi?B)?\s*\/\s*(?:Hr|Hour|Hours|Mo|Month|Day|Days|Min|Sec)\b`,
+  // numeric + bare time/size unit (e.g. "200 Hrs", "1 TB", "100 GB", "1 vCore", "100 RU/s")
+  String.raw`\b\d+(?:\.\d+)?\s+(?:Hrs?|Hours?|Days?|Months?|Gi?B|Ti?B|Mi?B|vCores?|vCPUs?|Cores?|RU\/s)\b`,
+  // numeric multiplier alone trailing a token (e.g. "1M" in "Std Trxns-1M", "10K/Hr" handled above)
+  String.raw`\b\d+(?:\.\d+)?[KM]\b`,
+].join('|'), 'gi');
 
 // Returns { normalized, region } where region is an armRegionName if an EA shortcode
 // was detected in the trailing segment (and stripped from the normalized string).
@@ -1370,8 +1440,10 @@ function normalizeEaSku(raw){
   let s = String(raw||'').trim();
   if (!s) return { normalized: s, region: '' };
   s = s.replace(UOM_STRIP_RE, '').replace(/\s{2,}/g,' ').trim();
-  // Collapse orphan dash-pairs left where a UoM token used to live (e.g. "Unit--US E2" or "Unit- -US E2" -> "Unit - US E2")
-  s = s.replace(/\s*-\s*-\s*/g, ' - ');
+  // Collapse orphan dash-pairs / triples / chains left where UoM tokens used to live
+  // (e.g. "Unit--US E2", "DB-- -AU E", "DB- - -AU E" -> " - "). Run until stable.
+  let prev;
+  do { prev = s; s = s.replace(/\s*-\s*-\s*/g, ' - '); } while (s !== prev);
   for (const [re, sub] of EA_ALIASES) s = s.replace(re, sub);
   // Force " - " around hyphens between word chars so splitProductString's /\s+-\s+/ catches EA's glued format.
   s = s.replace(/([A-Za-z0-9])\s*-\s*([A-Za-z0-9])/g, '$1 - $2');
@@ -1385,7 +1457,9 @@ function normalizeEaSku(raw){
       s = parts.join(' - ');
     }
   }
-  s = s.replace(/\s+-\s+-\s+/g,' - ').replace(/\s+-\s*$/,'').trim();
+  // Final cleanup: collapse residual dash-runs and strip trailing/leading separators.
+  do { prev = s; s = s.replace(/\s*-\s*-\s*/g, ' - '); } while (s !== prev);
+  s = s.replace(/\s*-\s*$/,'').replace(/^\s*-\s*/,'').trim();
   return { normalized: s, region: armRegion };
 }
 
@@ -1395,17 +1469,30 @@ const KNOWN_REGIONS = ['AU East','AU Southeast','AU Central','AU Central 2','US 
 function parseBulkInput(raw){
   const lines = String(raw||'').split(/\r?\n/).map(l => l.replace(/^\uFEFF/,'').trim()).filter(Boolean);
   if (!lines.length) return [];
-  // detect delimiter (tab or comma)
-  const delim = lines[0].includes('\t') ? '\t' : (lines[0].includes(',') ? ',' : null);
+  // detect delimiter (tab or comma) — prefer multi-space (4+ spaces) when no tab/comma,
+  // since the EA price-sheet paste uses runs of spaces between columns.
+  let delim;
+  if (lines[0].includes('\t')) delim = '\t';
+  else if (lines[0].includes(',')) delim = ',';
+  else if (/\s{2,}/.test(lines[0])) delim = /\s{2,}/;
+  else delim = null;
   // detect header
   const first = lines[0].toLowerCase();
   const hasHeader = /\b(product|item.?name|service)\b/.test(first) && /(part|sku|number)/.test(first);
+  // Detect column order: if any non-header row's first column matches a PartNumber pattern
+  // (3 alphanum + dash + 4-6 digits, e.g. "AAD-62495", "P5H-00048"), treat cols as [part, product].
+  const partRe = /^[A-Z0-9]{3}-\d{4,6}$/;
+  let partFirst = false;
+  for (let i = hasHeader ? 1 : 0; i < Math.min(lines.length, 10); i++){
+    const c = delim ? lines[i].split(delim).map(x => x.trim().replace(/^"|"$/g,'')) : [lines[i]];
+    if (c.length >= 2 && partRe.test(c[0]||'')){ partFirst = true; break; }
+  }
   const start = hasHeader ? 1 : 0;
   const out = [];
   for (let i = start; i < lines.length; i++){
     let cols = delim ? lines[i].split(delim).map(c => c.trim().replace(/^"|"$/g,'')) : [lines[i]];
-    const product = cols[0] || '';
-    const partNumber = (cols[1] || '').trim();
+    const product    = partFirst ? (cols[1] || '') : (cols[0] || '');
+    const partNumber = partFirst ? (cols[0] || '').trim() : (cols[1] || '').trim();
     if (!product && !partNumber) continue;
     out.push({product, partNumber});
   }
@@ -1448,6 +1535,14 @@ async function runBulk(){
     const {product, partNumber} = parsed[idx];
     $('bulkStatus').textContent = `Processing ${idx+1}/${parsed.length}: ${product || partNumber}`;
     try{
+      // Series-rollup detection: EA invoice parent rows ("VM M Series", "Specialized
+      // Compute VMware Sol") have no pricing meter. Flag clearly instead of failing.
+      if (SERIES_ROLLUP_RE.test(String(product||'').trim())){
+        rows.push({inputProduct: product, inputPartNumber: partNumber,
+          productName: '(series rollup \u2014 needs specific SKU/size)',
+          mcaUnitPrice: '', mcaUom: '', billingCurrency: getBillingCurrency()});
+        continue;
+      }
       const norm = normalizeEaSku(product);
       const split = splitProductString(norm.normalized || product);
       // Region precedence: EA shortcode detected by normalizer (armRegionName, e.g. "eastus2")
@@ -1474,6 +1569,34 @@ async function runBulk(){
           const j = await apiFetchAll(f, 10, (n, p) => { $('bulkStatus').textContent = `${idx+1}/${parsed.length}: ${product}... fetched ${n} items (page ${p})`; });
           if (j.Items?.length){ items = j.Items; break; }
         }catch(e){}
+      }
+      // Tier-3 fuzzy fallback: structured filters all returned 0. Try a broad search
+      // on just the first token of productName, then score each candidate by how many
+      // of the input's tokens appear in (productName + skuName + meterName). Keep the
+      // top match if it scores at least half the input's tokens.
+      if (!items.length && pn){
+        const broadToken = pn.split(/\s+/)[0];
+        if (broadToken && broadToken.length >= 3){
+          try{
+            const f = `contains(productName, '${broadToken.replace(/'/g,"''")}')`;
+            const j = await apiFetchAll(f, 3);
+            const cand = j.Items || [];
+            if (cand.length){
+              const inputTokens = `${pn} ${split.middleParts.join(' ')}`
+                .toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length >= 2);
+              const need = Math.max(2, Math.ceil(inputTokens.length / 2));
+              let best = null, bestScore = 0;
+              for (const c of cand){
+                const hay = `${c.productName||''} ${c.skuName||''} ${c.meterName||''}`.toLowerCase();
+                let sc = 0;
+                for (const t of inputTokens) if (hay.includes(t)) sc++;
+                if (armRegion && (c.armRegionName||'').toLowerCase() === armRegion) sc += 2;
+                if (sc > bestScore){ bestScore = sc; best = c; }
+              }
+              if (best && bestScore >= need) items = cand.filter(c => c.meterId === best.meterId);
+            }
+          }catch(e){}
+        }
       }
       if (!items.length){
         rows.push({inputProduct: product, inputPartNumber: partNumber, productName: '(not found)',
